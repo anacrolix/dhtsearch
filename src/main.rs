@@ -38,13 +38,18 @@ fn app() -> Html {
             });
             let state = state.clone();
             wasm_bindgen_futures::spawn_local(async move {
-                let url = "/dhtindex/searchInfos?".to_string();
+                let url = if false {
+                    "/dhtindex/searchInfos?"
+                } else {
+                    "https://dht-indexer-v2.fly.dev/searchInfos?"
+                }
+                .to_string();
                 let url = url::form_urlencoded::Serializer::new(url)
                     .extend_pairs(&[("s", query)])
                     .finish();
                 info!("searching {:?}", url);
                 let fetched_videos: InfosSearch = Request::get(url.as_ref())
-                    .mode(NoCors)
+                    // .mode(NoCors)
                     .send()
                     .await
                     .unwrap()
@@ -105,16 +110,26 @@ struct TorrentListProps {
 }
 #[function_component(TorrentsList)]
 fn torrents_list(TorrentListProps { torrents }: &TorrentListProps) -> Html {
-    torrents
+    let rows: Vec<Html> = torrents
         .iter()
         .map(|torrent| {
+            let magnet_link = Url::parse_with_params(
+                "magnet:",
+                &[("xt", format!("urn:btih:{}", &torrent.info_hash))],
+            )
+            .unwrap()
+            .to_string();
             html! {
-                <p key={torrent.info_hash.clone()}>
-                    { torrent.name.clone() }
-                </p>
+                <tr key={torrent.info_hash.clone()}>
+                    <td><a href={magnet_link}>{ torrent.name.clone() }</a></td>
+                    <td>{ torrent.swarm_info.seeders }</td>
+                </tr>
             }
         })
-        .collect()
+        .collect();
+    html! {
+        <table>{ rows }</table>
+    }
 }
 
 fn main() {
@@ -142,6 +157,6 @@ pub fn SearchForm(SearchFormProps { on_search }: &SearchFormProps) -> Html {
         }
     });
     html! {
-            <input onchange={on_change}/>
+        <input onchange={on_change}/>
     }
 }
