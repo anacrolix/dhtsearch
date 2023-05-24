@@ -1,26 +1,36 @@
 use gloo_net::http::Request;
+use gloo_net::http::RequestMode::NoCors;
 use serde::Deserialize;
 use yew::prelude::*;
 
 #[function_component(App)]
 fn app() -> Html {
-    let videos = use_state(|| vec![]);
+    let torrents = use_state(|| {
+        Some(InfosSearch {
+            items: vec![InfoItem {
+                name: "Hello".to_string(),
+                no_swarm_info: true,
+                ..Default::default()
+            }],
+            ..Default::default()
+        })
+    });
 
-    let selected_video = use_state(|| None);
     {
-        let videos = videos.clone();
+        let torrents = torrents.clone();
         use_effect_with_deps(
             move |_| {
-                let videos = videos.clone();
+                let videos = torrents.clone();
                 wasm_bindgen_futures::spawn_local(async move {
-                    let fetched_videos: Vec<Video> = Request::get("/tutorial/data.json")
+                    let fetched_videos: InfosSearch = Request::get("/dhtindex/searchInfos?s=ubuntu%20linux")
+                        .mode(NoCors)
                         .send()
                         .await
                         .unwrap()
                         .json()
                         .await
                         .unwrap();
-                    videos.set(fetched_videos);
+                    torrents.set(Some(fetched_videos));
                 });
                 || ()
             },
@@ -28,57 +38,58 @@ fn app() -> Html {
         );
     }
 
-    let on_video_select = {
-        let selected_video = selected_video.clone();
-        Callback::from(move |video: Video| selected_video.set(Some(video)))
-    };
-
-    let details = selected_video.as_ref().map(|video| {
-        html! {
-            <VideoDetails video={video.clone()} />
-        }
-    });
-
     html! {
         <>
-            <h1>{ "RustConf Explorer" }</h1>
+            <h1>{ "DHT search" }</h1>
             <div>
-                <h3>{"Videos to watch"}</h3>
-                <VideosList videos={(*videos).clone()} on_click={on_video_select.clone()}/>
+                <h3>{"Torrents"}</h3>
+                <TorrentsList torrents={torrents.as_ref().unwrap_or(&Default::default()).items.clone()} />
             </div>
-            { for details }
         </>
     }
 }
 
-#[derive(Clone, PartialEq, Deserialize)]
-struct Video {
-    id: usize,
-    title: String,
-    speaker: String,
-    url: String,
+#[derive(Clone, PartialEq, Deserialize, Default)]
+#[serde(rename_all="PascalCase")]
+struct InfosSearch {
+    total: usize,
+    err: Option<String>,
+    items: Vec<InfoItem>,
+}
+
+#[derive(Clone, PartialEq, Deserialize, Default)]
+#[serde(rename_all="PascalCase")]
+struct InfoItem {
+    info_hash: String,
+    name: String,
+    swarm_info: SwarmInfo,
+    size: u64,
+    age: String,
+    no_swarm_info: bool,
+}
+
+
+#[derive(Clone, PartialEq, Deserialize, Default)]
+#[serde(rename_all="PascalCase")]
+struct SwarmInfo {
+    seeders: u32,
+    completed: u32,
+    leechers: u32,
 }
 
 #[derive(Properties, PartialEq)]
-struct VideosListProps {
-    videos: Vec<Video>,
-    on_click: Callback<Video>,
+struct TorrentListProps {
+    torrents: Vec<InfoItem>,
 }
-#[function_component(VideosList)]
-fn videos_list(VideosListProps { videos, on_click }: &VideosListProps) -> Html {
-    let on_click = on_click.clone();
-    videos
+#[function_component(TorrentsList)]
+fn torrents_list(TorrentListProps { torrents }: &TorrentListProps) -> Html {
+    torrents
         .iter()
-        .map(|video| {
-            let on_video_select = {
-                let on_click = on_click.clone();
-                let video = video.clone();
-                Callback::from(move |_| {
-                    on_click.emit(video.clone())
-                })
-            };
+        .map(|torrent| {
             html! {
-                <p key={video.id} onclick={on_video_select}>{format!("{}: {}", video.speaker, video.title)}</p>
+                <p key={torrent.info_hash.clone()}>
+                    { torrent.name.clone() }
+                </p>
             }
         })
         .collect()
@@ -86,19 +97,4 @@ fn videos_list(VideosListProps { videos, on_click }: &VideosListProps) -> Html {
 
 fn main() {
     yew::Renderer::<App>::new().render();
-}
-
-#[derive(Properties, PartialEq)]
-struct VideosDetailsProps {
-    video: Video,
-}
-
-#[function_component(VideoDetails)]
-fn video_details(VideosDetailsProps { video }: &VideosDetailsProps) -> Html {
-    html! {
-        <div>
-            <h3>{ video.title.clone() }</h3>
-            <img src="https://via.placeholder.com/640x360.png?text=Video+Player+Placeholder" alt="video thumbnail" />
-        </div>
-    }
 }
