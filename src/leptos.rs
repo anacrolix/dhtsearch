@@ -31,10 +31,12 @@ fn App(cx: Scope) -> impl IntoView {
                 </ul>
             }
         >
-            <div>
-                <h3>{"Torrents"}</h3>
-                <TorrentsListLeptos search=torrents/>
-            </div>
+            <Suspense fallback=move || view! { cx, <p>"Searching..."</p> }>
+                <div>
+                    <h3>{"Torrents"}</h3>
+                    <TorrentsListLeptos search=torrents/>
+                </div>
+            </Suspense>
         </ErrorBoundary>
     }
 }
@@ -62,11 +64,9 @@ fn TorrentsListLeptos(
         })
     };
     view! { cx,
-        <Suspense
-            fallback=move || view! { cx, <p>"Searching..."</p> }
-        >
-        {rows}
-        </Suspense>
+        <table>
+            {rows}
+        </table>
     }
 }
 
