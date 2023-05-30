@@ -29,7 +29,7 @@ pub struct SwarmInfo {
     pub leechers: u32,
 }
 
-pub async fn search(query: String) -> InfosSearch {
+pub async fn search(query: String) -> Result<InfosSearch, gloo_net::Error> {
     let url = if false {
         "/dhtindex/searchInfos?"
     } else {
@@ -40,13 +40,5 @@ pub async fn search(query: String) -> InfosSearch {
         .extend_pairs(&[("s", query)])
         .finish();
     info!("searching {:?}", url);
-    let fetched_videos: InfosSearch = Request::get(url.as_ref())
-        // .mode(NoCors)
-        .send()
-        .await
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
-    fetched_videos
+    Request::get(url.as_ref()).send().await?.json().await
 }

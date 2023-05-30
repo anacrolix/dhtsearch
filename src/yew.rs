@@ -1,10 +1,10 @@
 use crate::api::*;
+use crate::make_magnet_link;
 use log::info;
 use std::ops::Deref;
 use wasm_bindgen::JsCast;
 use web_sys::{EventTarget, HtmlInputElement};
 use yew::prelude::*;
-use crate::make_magnet_link;
 
 #[derive(PartialEq, Clone, Properties)]
 struct AppState {

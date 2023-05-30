@@ -15,10 +15,7 @@ fn main() {
 }
 
 fn make_magnet_link(info_hash: &str) -> String {
-    Url::parse_with_params(
-        "magnet:",
-        &[("xt", format!("urn:btih:{}", info_hash))],
-    )
+    Url::parse_with_params("magnet:", &[("xt", format!("urn:btih:{}", info_hash))])
         .unwrap()
         .to_string()
 }
