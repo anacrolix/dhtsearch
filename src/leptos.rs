@@ -53,7 +53,7 @@ fn TorrentsListLeptos(
                     .into_iter()
                     .map(|torrent| view! { cx,
                         <tr>
-                            <td><a href={make_magnet_link(&torrent.name)}>{torrent.name}</a></td>
+                            <td class="name"><a href={make_magnet_link(&torrent.name)}>{torrent.name}</a></td>
                             <td>{torrent.swarm_info.seeders}</td>
                             <td>{format_size(torrent.size, DECIMAL)}</td>
                             <td>{torrent.age}</td>
@@ -65,6 +65,12 @@ fn TorrentsListLeptos(
     };
     view! { cx,
         <table>
+            <tr>
+                <th>"Name"</th>
+                <th>"Seeders"</th>
+                <th>"Size"</th>
+                <th>"Age"</th>
+            </tr>
             {rows}
         </table>
     }
