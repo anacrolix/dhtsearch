@@ -1,5 +1,4 @@
 use gloo_net::http::Request;
-use gloo_net::Error::GlooError;
 use log::info;
 use serde::Deserialize;
 

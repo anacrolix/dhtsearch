@@ -49,7 +49,7 @@ fn TorrentsListLeptos(
     let rows = move || {
         search.read(cx).map(|search| {
             search.map(move |ok| {
-                ok.items.clone()
+                ok.items
                     .into_iter()
                     .map(|torrent| view! { cx,
                         <tr>
