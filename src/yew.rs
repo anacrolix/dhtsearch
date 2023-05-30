@@ -1,10 +1,10 @@
 use crate::api::*;
 use log::info;
 use std::ops::Deref;
-use url::Url;
 use wasm_bindgen::JsCast;
 use web_sys::{EventTarget, HtmlInputElement};
 use yew::prelude::*;
+use crate::make_magnet_link;
 
 #[derive(PartialEq, Clone, Properties)]
 struct AppState {
@@ -67,12 +67,7 @@ fn torrents_list(TorrentListProps { torrents }: &TorrentListProps) -> Html {
     let rows: Vec<Html> = torrents
         .iter()
         .map(|torrent| {
-            let magnet_link = Url::parse_with_params(
-                "magnet:",
-                &[("xt", format!("urn:btih:{}", &torrent.info_hash))],
-            )
-            .unwrap()
-            .to_string();
+            let magnet_link = make_magnet_link(&torrent.info_hash);
             html! {
                 <tr key={torrent.info_hash.clone()}>
                     <td><a href={magnet_link}>{ torrent.name.clone() }</a></td>

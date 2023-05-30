@@ -2,6 +2,8 @@ use crate::api::*;
 use leptos::html::Input;
 use leptos::*;
 use web_sys::SubmitEvent;
+use humansize::{format_size, DECIMAL};
+use super::make_magnet_link;
 
 #[component]
 fn App(cx: Scope) -> impl IntoView {
@@ -36,13 +38,26 @@ fn TorrentsListLeptos(cx: Scope, search: Signal<Option<InfosSearch>>) -> impl In
                 search
                     .items
                     .into_iter()
-                    .map(|torrent| view! { cx, <tr>{torrent.name}</tr>})
+                    .map(|torrent| view! { cx,
+                        <tr>
+                            <td><a href={make_magnet_link(&torrent.name)}>{torrent.name}</a></td>
+                            <td>{torrent.swarm_info.seeders}</td>
+                            <td>{format_size(torrent.size, DECIMAL)}</td>
+                            <td>{torrent.age}</td>
+                        </tr>
+                    })
                     .collect_view(cx)
             })
             .unwrap_or_default()
     };
     view! { cx,
         <table>
+            <tr>
+                <th>"Name"</th>
+                <th>"Seeders"</th>
+                <th>"Size"</th>
+                <th>"Age"</th>
+            </tr>
             {rows}
         </table>
     }
