@@ -1,7 +1,6 @@
 use crate::api::*;
 use gloo_net::http::Request;
 use log::info;
-use serde::Deserialize;
 use std::ops::Deref;
 use url::Url;
 use wasm_bindgen::JsCast;
