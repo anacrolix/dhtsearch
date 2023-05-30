@@ -1,5 +1,5 @@
 use gloo_net::http::Request;
-use gloo_net::http::RequestMode::NoCors;
+use leptos::*;
 use log::info;
 use serde::Deserialize;
 use std::ops::Deref;
@@ -134,7 +134,7 @@ fn torrents_list(TorrentListProps { torrents }: &TorrentListProps) -> Html {
 
 fn main() {
     wasm_logger::init(wasm_logger::Config::default());
-    yew::Renderer::<App>::new().render();
+    mount_to_body(|cx| view! { cx,  <p>"Hello, world!"</p> })
 }
 
 #[derive(PartialEq, Properties)]
