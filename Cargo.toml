@@ -15,4 +15,4 @@ wasm-bindgen = "0.2.86"
 url = "2.3.1"
 log = "0.4.17"
 wasm-logger = "0.2.0"
-leptos = { version = "0.3.0", features = ["stable"] }
+leptos = { version = "0.3.0" }

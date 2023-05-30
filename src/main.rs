@@ -14,6 +14,22 @@ struct AppState {
     query: Option<String>,
 }
 
+#[component]
+fn App(cx: Scope) -> impl IntoView {
+    let (query, set_query) = create_signal(cx, None);
+    let (torrents, set_torrents) = create_signal(cx, vec![]);
+    view! { cx,
+        <h1>{ "DHT search" }</h1>
+        <input type="text" on:input=move |ev| {
+            set_query(Some(event_target_value(&ev)));
+        }/>
+        <div>
+            <h3>{"Torrents"}</h3>
+            <TorrentsListLeptos torrents=torrents/>
+        </div>
+    }
+}
+
 #[function_component(App)]
 fn app() -> Html {
     let state = use_state_eq(|| AppState {
@@ -104,6 +120,21 @@ struct SwarmInfo {
     leechers: u32,
 }
 
+#[component]
+fn TorrentsListLeptos(cx: Scope, torrents: ReadSignal<Vec<InfoItem>>) -> impl IntoView {
+    let rows = move || {
+        torrents()
+            .into_iter()
+            .map(|torrent| view! { cx, <tr>{torrent.name}</tr>})
+            .collect_view(cx)
+    };
+    view! { cx,
+        <table>
+            {rows}
+        </table>
+    }
+}
+
 #[derive(Properties, PartialEq)]
 struct TorrentListProps {
     torrents: Vec<InfoItem>,
@@ -134,7 +165,7 @@ fn torrents_list(TorrentListProps { torrents }: &TorrentListProps) -> Html {
 
 fn main() {
     wasm_logger::init(wasm_logger::Config::default());
-    mount_to_body(|cx| view! { cx,  <p>"Hello, world!"</p> })
+    mount_to_body(|cx| view! { cx,  <App/> })
 }
 
 #[derive(PartialEq, Properties)]
