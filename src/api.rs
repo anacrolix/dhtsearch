@@ -1,4 +1,5 @@
 use gloo_net::http::Request;
+use gloo_net::Error::GlooError;
 use log::info;
 use serde::Deserialize;
 
@@ -30,6 +31,7 @@ pub struct SwarmInfo {
 }
 
 pub async fn search(query: String) -> Result<InfosSearch, gloo_net::Error> {
+    // return Err(GlooError("shit".to_string()));
     let url = if false {
         "/dhtindex/searchInfos?"
     } else {

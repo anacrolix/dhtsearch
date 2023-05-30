@@ -3,13 +3,18 @@ use crate::api::*;
 use humansize::{format_size, DECIMAL};
 use leptos::html::Input;
 use leptos::*;
+use std::sync::Arc;
 use web_sys::SubmitEvent;
+
+type SearchErrWrapper<T> = Arc<T>;
 
 #[component]
 fn App(cx: Scope) -> impl IntoView {
     let (query, set_query) = create_signal(cx, "".to_string());
     let query_input: NodeRef<Input> = create_node_ref(cx);
-    let torrents = create_local_resource(cx, query, |query| async move { search(query).await });
+    let torrents = create_local_resource(cx, query, |query| async move {
+        search(query).await.map_err(SearchErrWrapper::new)
+    });
     let on_query_submit = move |ev: SubmitEvent| {
         ev.prevent_default();
         set_query(query_input().unwrap().value());
@@ -37,11 +42,11 @@ fn App(cx: Scope) -> impl IntoView {
 #[component]
 fn TorrentsListLeptos(
     cx: Scope,
-    search: Resource<String, Result<InfosSearch, gloo_net::Error>>,
+    search: Resource<String, Result<InfosSearch, SearchErrWrapper<gloo_net::Error>>>,
 ) -> impl IntoView {
     let rows = move || {
-        search.with(cx, |search| {
-            search.as_ref().ok().map(move |ok| {
+        search.read(cx).map(|search| {
+            search.map(move |ok| {
                 ok.items.clone()
                     .into_iter()
                     .map(|torrent| view! { cx,
