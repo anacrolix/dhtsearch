@@ -1,8 +1,10 @@
+use gloo_net::http::Request;
+use log::info;
 use serde::Deserialize;
 
 #[derive(Clone, PartialEq, Deserialize, Default)]
 #[serde(rename_all = "PascalCase")]
-pub(crate) struct InfosSearch {
+pub struct InfosSearch {
     pub total: usize,
     pub err: Option<String>,
     pub items: Vec<InfoItem>,
@@ -10,7 +12,7 @@ pub(crate) struct InfosSearch {
 
 #[derive(Clone, PartialEq, Deserialize, Default)]
 #[serde(rename_all = "PascalCase")]
-pub(crate) struct InfoItem {
+pub struct InfoItem {
     pub info_hash: String,
     pub name: String,
     pub swarm_info: SwarmInfo,
@@ -21,8 +23,30 @@ pub(crate) struct InfoItem {
 
 #[derive(Clone, PartialEq, Deserialize, Default)]
 #[serde(rename_all = "PascalCase")]
-pub(crate) struct SwarmInfo {
+pub struct SwarmInfo {
     pub seeders: u32,
     pub completed: u32,
     pub leechers: u32,
+}
+
+pub async fn search(query: String) -> InfosSearch {
+    let url = if false {
+        "/dhtindex/searchInfos?"
+    } else {
+        "https://dht-indexer-v2.fly.dev/searchInfos?"
+    }
+    .to_string();
+    let url = url::form_urlencoded::Serializer::new(url)
+        .extend_pairs(&[("s", query)])
+        .finish();
+    info!("searching {:?}", url);
+    let fetched_videos: InfosSearch = Request::get(url.as_ref())
+        // .mode(NoCors)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    fetched_videos
 }

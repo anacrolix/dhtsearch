@@ -1,5 +1,4 @@
 use crate::api::*;
-use gloo_net::http::Request;
 use log::info;
 use std::ops::Deref;
 use url::Url;
@@ -37,24 +36,7 @@ fn app() -> Html {
             });
             let state = state.clone();
             wasm_bindgen_futures::spawn_local(async move {
-                let url = if false {
-                    "/dhtindex/searchInfos?"
-                } else {
-                    "https://dht-indexer-v2.fly.dev/searchInfos?"
-                }
-                .to_string();
-                let url = url::form_urlencoded::Serializer::new(url)
-                    .extend_pairs(&[("s", query)])
-                    .finish();
-                info!("searching {:?}", url);
-                let fetched_videos: InfosSearch = Request::get(url.as_ref())
-                    // .mode(NoCors)
-                    .send()
-                    .await
-                    .unwrap()
-                    .json()
-                    .await
-                    .unwrap();
+                let fetched_videos = search(query).await;
                 let mut app_state = state.deref().clone();
                 app_state.search_result = Some(fetched_videos);
                 state.set(app_state);

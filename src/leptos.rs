@@ -3,8 +3,12 @@ use leptos::*;
 
 #[component]
 fn App(cx: Scope) -> impl IntoView {
-    let (_query, set_query) = create_signal(cx, None);
-    let (torrents, _set_torrents) = create_signal(cx, vec![]);
+    let (query, set_query) = create_signal(cx, None);
+    let torrents = create_local_resource(
+        cx,
+        query,
+        |query| async move { search(query.unwrap()).await },
+    );
     view! { cx,
         <h1>{ "DHT search" }</h1>
         <input type="text" on:input=move |ev| {
@@ -12,18 +16,22 @@ fn App(cx: Scope) -> impl IntoView {
         }/>
         <div>
             <h3>{"Torrents"}</h3>
-            <TorrentsListLeptos torrents=torrents/>
+            <TorrentsListLeptos search={Signal::derive(cx, move || torrents.read(cx))}/>
         </div>
     }
 }
 
 #[component]
-fn TorrentsListLeptos(cx: Scope, torrents: ReadSignal<Vec<InfoItem>>) -> impl IntoView {
+fn TorrentsListLeptos(cx: Scope, search: Signal<Option<InfosSearch>>) -> impl IntoView {
     let rows = move || {
-        torrents()
-            .into_iter()
-            .map(|torrent| view! { cx, <tr>{torrent.name}</tr>})
-            .collect_view(cx)
+        search()
+            .map(|search| {
+                search
+                    .items
+                    .into_iter()
+                    .map(|torrent| view! { cx, <tr>{torrent.name}</tr>}).collect_view(cx)
+            })
+            .unwrap_or_default()
     };
     view! { cx,
         <table>
