@@ -104,3 +104,7 @@ pub fn SearchForm(SearchFormProps { on_search }: &SearchFormProps) -> Html {
         <input onchange={on_change}/>
     }
 }
+
+pub fn mount_to_body() {
+    yew::Renderer::<App>::new().render();
+}

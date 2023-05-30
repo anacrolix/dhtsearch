@@ -9,9 +9,9 @@ edition = "2021"
 yew = { version = "0.20.0", features = ["csr"], optional = true }
 gloo-net = "0.2"
 serde = { version = "1.0", features = ["derive"] }
-#wasm-bindgen-futures = "0.4"
+wasm-bindgen-futures = { version = "0.4", optional = true }
 web-sys = "0.3.63"
-#wasm-bindgen = "0.2.86"
+wasm-bindgen = { version = "0.2.86", optional = true }
 url = "2.3.1"
 log = "0.4.17"
 wasm-logger = "0.2.0"
@@ -20,5 +20,5 @@ humansize = "2.1.3"
 
 [features]
 default = ["leptos"]
-yew = ["dep:yew"]
+yew = ["dep:yew", "dep:wasm-bindgen", "dep:wasm-bindgen-futures"]
 leptos = ["dep:leptos"]
