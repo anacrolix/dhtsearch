@@ -1,6 +1,12 @@
 serve:
 	trunk serve --open
 
+deploy: build
+	git checkout -B docs
+	git add docs
+	git commit -m 'Build docs'
+	git push --force-with-lease
+
 build: build-leptos build-yew
 
 build-leptos:
