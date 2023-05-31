@@ -298,6 +298,7 @@ dependencies = [
  "leptos",
  "log",
  "serde",
+ "serde_json",
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",

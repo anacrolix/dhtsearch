@@ -43,10 +43,15 @@ fn App(cx: Scope) -> impl IntoView {
             }
         >
             <Suspense fallback=move || view! { cx, <p>"Searching..."</p> }>
-                {move || search_resource.read(cx).map(|ready: Result<_, SearchErrWrapper<gloo_net::Error>>| match ready {
-                    Ok(None) => None,
-                    otherwise => Some(otherwise.map(|ok|ok.map(|some| view! { cx, <TorrentsListLeptos search_value=some/> }))),
-                })}
+                {move || search_resource.read(cx).map(
+                    |ready: Result<_, SearchErrWrapper<gloo_net::Error>>|
+                        match ready {
+                            Ok(None) => None,
+                            otherwise => Some(otherwise.map(|ok|ok.map(|some| view! { cx,
+                                <TorrentsListLeptos search_value=some/>
+                            }))),
+                        }
+                )}
             </Suspense>
         </ErrorBoundary>
     }
