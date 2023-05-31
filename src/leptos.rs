@@ -3,10 +3,15 @@ use crate::api::*;
 use humansize::{format_size, DECIMAL};
 use leptos::html::Input;
 use leptos::*;
+use log::info;
+use std::collections::HashMap;
+use std::result::Result;
 use std::sync::Arc;
 use web_sys::SubmitEvent;
 
 type SearchErrWrapper<T> = Arc<T>;
+
+type CloneableApiError = Arc<gloo_net::Error>;
 
 fn list_errors(cx: Scope, errors: RwSignal<Errors>) -> impl IntoView {
     errors
@@ -26,6 +31,39 @@ fn App(cx: Scope) -> impl IntoView {
         }
         Ok(Some(search(query).await.map_err(SearchErrWrapper::new)?))
     });
+    let info_files_resource = create_local_resource(
+        cx,
+        move || {
+            search_resource
+                .read(cx)
+                .map(|result| result.ok())
+                .flatten()
+                .flatten()
+        },
+        |search_resource_value: Option<InfosSearch>| async move {
+            match search_resource_value {
+                Some(infos_search) => Some({
+                    let result = get_info_files(
+                        infos_search
+                            .items
+                            .into_iter()
+                            .map(|info_item| info_item.info_hash)
+                            .collect(),
+                    )
+                    .await;
+                    info!("{:?}", result);
+                    result
+                        .map(|ok| {
+                            ok.into_iter()
+                                .map(|info_files| (info_files.info.info_hash.clone(), info_files))
+                                .collect::<InfoFilesCache>()
+                        })
+                        .map_err(SearchErrWrapper::new)
+                }),
+                None => None,
+            }
+        },
+    );
     let on_query_submit = move |ev: SubmitEvent| {
         ev.prevent_default();
         set_query(query_input().unwrap().value());
@@ -48,7 +86,7 @@ fn App(cx: Scope) -> impl IntoView {
                         match ready {
                             Ok(None) => None,
                             otherwise => Some(otherwise.map(|ok|ok.map(|some| view! { cx,
-                                <TorrentsListLeptos search_value=some/>
+                                <TorrentsList search_value=some info_files=info_files_resource/>
                             }))),
                         }
                 )}
@@ -57,20 +95,34 @@ fn App(cx: Scope) -> impl IntoView {
     }
 }
 
+type InfoFilesCache = HashMap<String, InfoFiles>;
+
 #[component]
-fn TorrentsListLeptos(cx: Scope, search_value: InfosSearch) -> impl IntoView {
-    let rows =
+fn TorrentsList(
+    cx: Scope,
+    search_value: InfosSearch,
+    info_files: Resource<Option<InfosSearch>, Option<Result<InfoFilesCache, CloneableApiError>>>,
+) -> impl IntoView {
+    let rows = {
+        let cache: InfoFilesCache = info_files
+            .read(cx)
+            .flatten()
+            .map(|result| result.ok())
+            .flatten()
+            .unwrap_or_default();
         search_value.items
             .into_iter()
             .map(|torrent| view! { cx,
-                        <tr>
-                            <td class="name"><a href={make_magnet_link(&torrent.name)}>{torrent.name}</a></td>
-                            <td>{torrent.swarm_info.seeders}</td>
-                            <td>{format_size(torrent.size, DECIMAL)}</td>
-                            <td>{torrent.age}</td>
-                        </tr>
-                    })
-            .collect_view(cx);
+                <tr>
+                    <td class="name"><a href={make_magnet_link(&torrent.name)}>{torrent.name}</a></td>
+                    <td>{torrent.swarm_info.seeders}</td>
+                    <td>{format_size(torrent.size, DECIMAL)}</td>
+                    <td>{torrent.age}</td>
+                    <td>{cache.get(&torrent.info_hash).map(|info_files|info_files.files.len())}</td>
+                </tr>
+            })
+            .collect_view(cx)
+    };
     view! { cx,
         <table>
             <tr>
@@ -78,6 +130,7 @@ fn TorrentsListLeptos(cx: Scope, search_value: InfosSearch) -> impl IntoView {
                 <th>"Seeders"</th>
                 <th>"Size"</th>
                 <th>"Age"</th>
+                <th>"Files"</th>
             </tr>
             {rows}
         </table>

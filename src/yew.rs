@@ -38,7 +38,7 @@ fn app() -> Html {
             wasm_bindgen_futures::spawn_local(async move {
                 let fetched_videos = search(query).await;
                 let mut app_state = state.deref().clone();
-                app_state.search_result = Some(fetched_videos);
+                app_state.search_result = fetched_videos.ok();
                 state.set(app_state);
             });
         })

@@ -21,7 +21,7 @@ pub struct InfoItem {
     pub no_swarm_info: bool,
 }
 
-#[derive(Clone, PartialEq, Deserialize, Default)]
+#[derive(Clone, PartialEq, Deserialize, Default, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct SwarmInfo {
     pub seeders: u32,
@@ -29,7 +29,7 @@ pub struct SwarmInfo {
     pub leechers: u32,
 }
 
-#[derive(Clone, PartialEq, Deserialize, Default)]
+#[derive(Clone, PartialEq, Deserialize, Default, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct InfoFiles {
     pub info: Info,
@@ -38,7 +38,7 @@ pub struct InfoFiles {
 
 type InfoFilesPayload = Vec<InfoFiles>;
 
-#[derive(Clone, PartialEq, Deserialize, Default)]
+#[derive(Clone, PartialEq, Deserialize, Default, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct Info {
     pub info_id: i64,
@@ -52,7 +52,7 @@ pub struct Info {
     pub scrape_time: String,
 }
 
-#[derive(Clone, PartialEq, Deserialize, Default)]
+#[derive(Clone, PartialEq, Deserialize, Default, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct File {
     // This might be optional (for null), and might be sent as byte array that needs manual
@@ -67,7 +67,9 @@ const DHT_INDEXER_URL: &str = if false {
     "https://dht-indexer-v2.fly.dev/"
 };
 
-pub async fn search(query: String) -> Result<InfosSearch, gloo_net::Error> {
+pub type Result<T> = std::result::Result<T, gloo_net::Error>;
+
+pub async fn search(query: String) -> Result<InfosSearch> {
     // return Err(GlooError("shit".to_string()));
     let mut url = DHT_INDEXER_URL.to_string();
     url.push_str("searchInfos?");
@@ -78,14 +80,19 @@ pub async fn search(query: String) -> Result<InfosSearch, gloo_net::Error> {
     Request::get(url.as_ref()).send().await?.json().await
 }
 
-pub async fn get_info_files(info_hashes: Vec<String>) -> Result<InfosSearch, gloo_net::Error> {
+pub async fn get_info_files(info_hashes: Vec<String>) -> Result<InfoFilesPayload> {
     // return Err(GlooError("shit".to_string()));
     let mut url = DHT_INDEXER_URL.to_string();
     url.push_str("infoFiles?");
     let url = url::form_urlencoded::Serializer::new(url)
-        .extend_pairs(info_hashes.iter().map(|ih|("ih", ih)))
+        .extend_pairs(info_hashes.iter().map(|ih| ("ih", ih)))
         .finish();
-    Request::get(url.as_ref()).send().await?.json().await
+    Request::get(url.as_ref())
+        .header("Accept", "application/json")
+        .send()
+        .await?
+        .json()
+        .await
 }
 
 #[cfg(test)]
@@ -93,7 +100,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_deserialize_info_files() -> serde_json::Result<()>{
+    fn test_deserialize_info_files() -> serde_json::Result<()> {
         let data = r#"
         [
           {
