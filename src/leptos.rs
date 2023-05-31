@@ -5,6 +5,9 @@ use leptos::html::Input;
 use leptos::*;
 use log::info;
 use std::collections::HashMap;
+use std::ffi::OsStr;
+use std::iter;
+use std::path::Path;
 use std::result::Result;
 use std::sync::Arc;
 use web_sys::SubmitEvent;
@@ -33,13 +36,7 @@ fn App(cx: Scope) -> impl IntoView {
     });
     let info_files_resource = create_local_resource(
         cx,
-        move || {
-            search_resource
-                .read(cx)
-                .map(|result| result.ok())
-                .flatten()
-                .flatten()
-        },
+        move || search_resource.read(cx).and_then(Result::ok).flatten(),
         |search_resource_value: Option<InfosSearch>| async move {
             match search_resource_value {
                 Some(infos_search) => Some({
@@ -97,6 +94,32 @@ fn App(cx: Scope) -> impl IntoView {
 
 type InfoFilesCache = HashMap<String, InfoFiles>;
 
+fn base_file_type(base: &str) -> Option<&str> {
+    Path::new(base).extension().and_then(OsStr::to_str)
+}
+
+fn file_type(file: &File) -> Option<&str> {
+    file.path
+        .as_ref()
+        .and_then(|parts| parts.last())
+        .and_then(|base| base_file_type(base))
+}
+
+fn file_types(info_files: &InfoFiles) -> Vec<&str> {
+    let mut all: Vec<_> = iter::once(base_file_type(&info_files.info.name))
+        .chain(info_files.files.iter().map(file_type))
+        .flatten()
+        .take(7)
+        .collect();
+    all.sort();
+    all.dedup();
+    all
+}
+
+fn view_file_types(file_types: Vec<&str>) -> impl IntoView {
+    format!("{:?}", file_types)
+}
+
 #[component]
 fn TorrentsList(
     cx: Scope,
@@ -107,19 +130,23 @@ fn TorrentsList(
         let cache: InfoFilesCache = info_files
             .read(cx)
             .flatten()
-            .map(|result| result.ok())
-            .flatten()
+            .and_then(Result::ok)
             .unwrap_or_default();
         search_value.items
             .into_iter()
-            .map(|torrent| view! { cx,
-                <tr>
-                    <td class="name"><a href={make_magnet_link(&torrent.name)}>{torrent.name}</a></td>
-                    <td>{torrent.swarm_info.seeders}</td>
-                    <td>{format_size(torrent.size, DECIMAL)}</td>
-                    <td>{torrent.age}</td>
-                    <td>{cache.get(&torrent.info_hash).map(|info_files|info_files.files.len())}</td>
-                </tr>
+            .map(|torrent| {
+                let info_files = cache.get(&torrent.info_hash);
+                let file_types = info_files.as_ref().map(|info_files| view_file_types(file_types(info_files)));
+                view! { cx,
+                    <tr>
+                        <td class="name"><a href={make_magnet_link(&torrent.name)}>{torrent.name}</a></td>
+                        <td>{torrent.swarm_info.seeders}</td>
+                        <td>{format_size(torrent.size, DECIMAL)}</td>
+                        <td>{torrent.age}</td>
+                        <td>{info_files.as_ref().map(|info_files|info_files.files.len())}</td>
+                        <td>{file_types}</td>
+                    </tr>
+                }
             })
             .collect_view(cx)
     };
@@ -131,6 +158,7 @@ fn TorrentsList(
                 <th>"Size"</th>
                 <th>"Age"</th>
                 <th>"Files"</th>
+                <th>"File Types"</th>
             </tr>
             {rows}
         </table>
