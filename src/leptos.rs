@@ -3,6 +3,7 @@ use crate::api::*;
 use humansize::{format_size, DECIMAL};
 use leptos::html::Input;
 use leptos::*;
+use leptos_router::*;
 use log::info;
 use std::collections::HashMap;
 use std::ffi::OsStr;
@@ -13,8 +14,11 @@ use std::sync::Arc;
 use web_sys::SubmitEvent;
 
 type SearchErrWrapper<T> = Arc<T>;
-
 type CloneableApiError = Arc<gloo_net::Error>;
+type SearchResultResource = Resource<String, Result<Option<InfosSearch>, CloneableApiError>>;
+type InfoFilesCache = HashMap<String, InfoFiles>;
+type InfoFilesResource =
+    Resource<Option<InfosSearch>, Option<Result<InfoFilesCache, CloneableApiError>>>;
 
 fn list_errors(cx: Scope, errors: RwSignal<Errors>) -> impl IntoView {
     errors
@@ -34,7 +38,7 @@ fn App(cx: Scope) -> impl IntoView {
         }
         Ok(Some(search(query).await.map_err(SearchErrWrapper::new)?))
     });
-    let info_files_resource = create_local_resource(
+    let info_files_resource: InfoFilesResource = create_local_resource(
         cx,
         move || search_resource.read(cx).and_then(Result::ok).flatten(),
         |search_resource_value: Option<InfosSearch>| async move {
@@ -65,34 +69,88 @@ fn App(cx: Scope) -> impl IntoView {
         ev.prevent_default();
         set_query(query_input().unwrap().value());
     };
+    let selected_torrent_info = move |cx| {
+        use_params_map(cx)
+            .with(|params| {
+                params
+                    .get("ih")
+                    .map(|info_hash| match info_files_resource.read(cx) {
+                        Some(Some(Ok(cache))) => Some(Some(cache.get(info_hash).cloned())),
+                        None => None,
+                        _ => Some(None),
+                    })
+            })
+            .flatten()
+            .flatten()
+    };
     view! { cx,
-        <h1>{ "DHT search" }</h1>
-        <form on:submit=on_query_submit>
-            <input type="text" node_ref=query_input/>
-        </form>
-        <ErrorBoundary
-            fallback=|cx, errors| view! { cx,
-                <ul>
-                    { list_errors(cx, errors) }
-                </ul>
-            }
-        >
-            <Suspense fallback=move || view! { cx, <p>"Searching..."</p> }>
-                {move || search_resource.read(cx).map(
-                    |ready: Result<_, SearchErrWrapper<gloo_net::Error>>|
-                        match ready {
-                            Ok(None) => None,
-                            otherwise => Some(otherwise.map(|ok|ok.map(|some| view! { cx,
-                                <TorrentsList search_value=some info_files=info_files_resource/>
-                            }))),
-                        }
-                )}
-            </Suspense>
-        </ErrorBoundary>
+        <Router>
+            <h1>{ "DHT search" }</h1>
+            <form on:submit=on_query_submit>
+                <input type="text" node_ref=query_input/>
+            </form>
+            <ErrorBoundary
+                fallback=|cx, errors| view! { cx,
+                    <ul>
+                        { list_errors(cx, errors) }
+                    </ul>
+                }
+            >
+                <Routes>
+                    <Route path="/" view=move |cx| view! { cx,
+                        <Suspense fallback=move || view! { cx, <p>"Searching..."</p> }>
+                            <SearchResult herp=search_resource info_files_resource/>
+                        </Suspense>
+                    }/>
+                    <Route path="/:ih" view=move |cx| view! { cx,
+                        <TorrentInfo info={selected_torrent_info(cx)}/>
+                    }/>
+                </Routes>
+            </ErrorBoundary>
+        </Router>
     }
 }
 
-type InfoFilesCache = HashMap<String, InfoFiles>;
+#[component]
+fn TorrentInfo(cx: Scope, info: Option<Option<InfoFiles>>) -> impl IntoView {
+    match info {
+        Some(Some(info)) => Some(
+            view! { cx,
+                <pre>
+                    { format!("{:#?}", info) }
+                </pre>
+            }
+            .into_view(cx),
+        ),
+        None => Some(
+            view! { cx,
+                <p>"Loading..."</p>
+            }
+            .into_view(cx),
+        ),
+        _ => None,
+    }
+}
+
+#[component]
+fn SearchResult(
+    cx: Scope,
+    herp: SearchResultResource,
+    info_files_resource: InfoFilesResource,
+) -> impl IntoView {
+    herp.read(cx).map(
+        |ready: Result<_, SearchErrWrapper<gloo_net::Error>>| match ready {
+            Ok(None) => None,
+            otherwise => Some(otherwise.map(|ok| {
+                ok.map(|some| {
+                    view! { cx,
+                        <TorrentsList search_value=some info_files=info_files_resource/>
+                    }
+                })
+            })),
+        },
+    )
+}
 
 fn base_file_type(base: &str) -> Option<&str> {
     Path::new(base).extension().and_then(OsStr::to_str)
@@ -132,14 +190,17 @@ fn TorrentsList(
             .flatten()
             .and_then(Result::ok)
             .unwrap_or_default();
-        search_value.items
+        search_value
+            .items
             .into_iter()
             .map(|torrent| {
                 let info_files = cache.get(&torrent.info_hash);
-                let file_types = info_files.as_ref().map(|info_files| view_file_types(file_types(info_files)));
+                let file_types = info_files
+                    .as_ref()
+                    .map(|info_files| view_file_types(file_types(info_files)));
                 view! { cx,
                     <tr>
-                        <td class="name"><a href={make_magnet_link(&torrent.name)}>{torrent.name}</a></td>
+                        <td class="name"><a href={torrent.info_hash}>{torrent.name}</a></td>
                         <td>{torrent.swarm_info.seeders}</td>
                         <td>{format_size(torrent.size, DECIMAL)}</td>
                         <td>{torrent.age}</td>

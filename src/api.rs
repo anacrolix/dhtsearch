@@ -89,6 +89,9 @@ pub async fn get_info_files(info_hashes: Vec<String>) -> Result<InfoFilesPayload
         .finish();
     Request::get(url.as_ref())
         .header("Accept", "application/json")
+        // I think this gets clobbered by the JS fetch API. I also doubt that lz4 is a valid
+        // encoding for browsers by default.
+        .header("Accept-Encoding", "lz4, br")
         .send()
         .await?
         .json()
