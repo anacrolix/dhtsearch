@@ -7,7 +7,7 @@ deploy: build
 	git commit -m 'Build docs'
 	git push --force-with-lease
 
-build: build-leptos build-yew
+build: build-leptos
 
 build-leptos:
 	trunk build --dist docs/leptos --release --public-url /leptos/
