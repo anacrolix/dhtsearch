@@ -1,9 +1,11 @@
 use crate::leptos::Error;
+use base64::Engine;
 use gloo_net::http::Request;
 use gloo_net::http::Response;
 use log::info;
-use serde::de::DeserializeOwned;
-use serde::Deserialize;
+use serde::de::{DeserializeOwned, Error as _, Visitor};
+use serde::{Deserialize, Deserializer, Serializer};
+use std::fmt::{Debug, Formatter};
 
 #[derive(Clone, PartialEq, Deserialize, Default)]
 #[serde(rename_all = "PascalCase")]
@@ -41,12 +43,81 @@ pub struct InfoFiles {
 
 type InfoFilesPayload = Vec<InfoFiles>;
 
+#[derive(Clone, PartialEq, Default)]
+pub struct InfoName(Vec<u8>);
+
+impl InfoName {
+    pub fn as_str(&self) -> &str {
+        unsafe { std::str::from_utf8_unchecked(&self.0) }
+    }
+}
+
+impl PartialEq<str> for InfoName {
+    fn eq(&self, other: &str) -> bool {
+        self.as_str() == other
+    }
+}
+
+impl std::fmt::Display for InfoName {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl Debug for InfoName {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.as_str())
+    }
+}
+
+impl AsRef<str> for InfoName {
+    fn as_ref(&self) -> &str {
+        std::str::from_utf8(&self.0).unwrap()
+    }
+}
+
+struct InfoNameVisitor;
+
+impl<'de> Visitor<'de> for InfoNameVisitor {
+    type Value = InfoName;
+
+    fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+        formatter.write_str("info name in base64")
+    }
+
+    fn visit_string<E>(self, v: String) -> std::result::Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        info!("visiting string {:?}", v);
+        Ok(InfoName(
+            ::base64::engine::general_purpose::STANDARD
+                .decode(&v)
+                .map_err(|err| E::custom(err.to_string()))?,
+        ))
+    }
+}
+
+impl<'de> Deserialize<'de> for InfoName {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let v: String = Deserialize::deserialize(deserializer)?;
+        Ok(InfoName(
+            ::base64::engine::general_purpose::STANDARD
+                .decode(&v)
+                .map_err(|err| D::Error::custom(err.to_string()))?,
+        ))
+    }
+}
+
 #[derive(Clone, PartialEq, Deserialize, Default, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct Info {
     pub info_id: i64,
     // This is sent as base64 from Go, might need a custom module.
-    pub name: String,
+    pub name: InfoName,
     pub info_hash: String,
     pub age: String,
     // The variant here might need optional fields.
@@ -118,7 +189,7 @@ pub async fn get_info_files(info_hashes: Vec<String>) -> Result<InfoFilesPayload
 mod tests {
     use super::*;
 
-    #[test]
+    #[test_log::test]
     fn test_deserialize_info_files() -> serde_json::Result<()> {
         let data = r#"
         [
@@ -147,6 +218,11 @@ mod tests {
         let v: InfoFilesPayload = serde_json::from_str(data)?;
         assert_eq!(v.len(), 1);
         assert_eq!(v[0].files.len(), 1);
+        assert_eq!(
+            &v[0].info.name,
+            "The.Internets.Own.Boy.The.Story.of.Aaron.Swartz.720p.HDRip.x264.AAC.MVGroup.org.mp4"
+        );
+        assert_eq!(format!("{:?}", v[0].info.name), format!("{:?}","The.Internets.Own.Boy.The.Story.of.Aaron.Swartz.720p.HDRip.x264.AAC.MVGroup.org.mp4"));
         Ok(())
     }
 }

@@ -146,9 +146,9 @@ fn TorrentInfo(cx: Scope) -> impl IntoView {
         None => Ok(view! { cx, <p>"Loading..."</p> }.into_view(cx)),
         Some(None) => Err(Arc::new(Error::Anyhow(anyhow!("missing ih param")))),
         Some(Some(Ok(info_files))) => Ok(view! { cx,
-            <a href=make_magnet_link(&info_files.info.info_hash)>"magnet link"</a>
-            <pre>{format!("{:#?}", info_files)}</pre>
-        }
+                <a href=make_magnet_link(&info_files.info.info_hash)>"magnet link"</a>
+                <pre>{format!("{:#?}", info_files)}</pre>
+            }
         .into_view(cx)),
         Some(Some(Err(err))) => Err(err),
     }
@@ -170,7 +170,10 @@ fn SearchResult(
     })
 }
 
-fn base_file_type(base: &str) -> Option<&str> {
+fn base_file_type<S>(base: &S) -> Option<&str>
+where
+    S: AsRef<OsStr> + ?Sized,
+{
     Path::new(base).extension().and_then(OsStr::to_str)
 }
 
@@ -182,7 +185,7 @@ fn file_type(file: &File) -> Option<&str> {
 }
 
 fn file_types(info_files: &InfoFiles) -> Vec<&str> {
-    let mut all: Vec<_> = iter::once(base_file_type(&info_files.info.name))
+    let mut all: Vec<_> = iter::once(base_file_type(info_files.info.name.as_str()))
         .chain(info_files.files.iter().map(file_type))
         .flatten()
         .take(7)
