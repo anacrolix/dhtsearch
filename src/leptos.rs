@@ -1,3 +1,4 @@
+use super::make_magnet_link;
 use crate::api::*;
 use anyhow::anyhow;
 use humansize::{format_size, DECIMAL};
@@ -122,9 +123,14 @@ fn TorrentInfo(cx: Scope) -> impl IntoView {
         |info_hash| async move {
             match info_hash {
                 Some(info_hash) => Some(
-                    get_info_files(vec![info_hash.clone()])
-                        .await
-                        .map_err(Arc::new),
+                    match get_info_files(vec![info_hash.clone()]).await {
+                        Ok(payload) if !payload.is_empty() => {
+                            Ok(payload.into_iter().next().unwrap())
+                        }
+                        Ok(_) => Err(anyhow!("unknown infohash").into()),
+                        Err(err) => Err(err),
+                    }
+                    .map_err(Arc::new),
                 ),
                 None => None,
             }
@@ -134,6 +140,7 @@ fn TorrentInfo(cx: Scope) -> impl IntoView {
         None => Ok(view! { cx, <p>"Loading..."</p> }.into_view(cx)),
         Some(None) => Err(Arc::new(Error::Anyhow(anyhow!("missing ih param")))),
         Some(Some(Ok(info_files))) => Ok(view! { cx,
+            <a href={make_magnet_link(&info_files.info.info_hash)}>"magnet link"</a>
             <pre>
                 { format!("{:#?}", info_files) }
             </pre>
