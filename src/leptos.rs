@@ -146,9 +146,9 @@ fn TorrentInfo(cx: Scope) -> impl IntoView {
         None => Ok(view! { cx, <p>"Loading..."</p> }.into_view(cx)),
         Some(None) => Err(Arc::new(Error::Anyhow(anyhow!("missing ih param")))),
         Some(Some(Ok(info_files))) => Ok(view! { cx,
-                <a href=make_magnet_link(&info_files.info.info_hash)>"magnet link"</a>
-                <pre>{format!("{:#?}", info_files)}</pre>
-            }
+            <a href=make_magnet_link(&info_files.info.info_hash)>"magnet link"</a>
+            <pre>{format!("{:#?}", info_files)}</pre>
+        }
         .into_view(cx)),
         Some(Some(Err(err))) => Err(err),
     }
@@ -192,8 +192,11 @@ fn file_types(info_files: &InfoFiles) -> Vec<&str> {
     all
 }
 
-fn view_file_types(file_types: Vec<&str>) -> impl IntoView {
-    format!("{:?}", file_types)
+fn view_file_types(cx: Scope, file_types: Vec<&str>) -> impl IntoView {
+    file_types
+        .into_iter()
+        .map(|file_type| view! { cx, <span class="badge">{file_type.to_owned()}</span> })
+        .collect_view(cx)
 }
 
 #[component]
@@ -215,7 +218,7 @@ fn TorrentsList(
                 let info_files = cache.get(&torrent.info_hash);
                 let file_types = info_files
                     .as_ref()
-                    .map(|info_files| view_file_types(file_types(info_files)));
+                    .map(|info_files| view_file_types(cx, file_types(info_files)));
                 view! { cx,
                     <tr>
                         <td class="name">
