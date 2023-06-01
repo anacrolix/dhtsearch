@@ -299,6 +299,7 @@ dependencies = [
 name = "dhtsearch"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "gloo-net",
  "humansize",
  "leptos",

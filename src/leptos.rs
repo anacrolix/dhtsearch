@@ -1,5 +1,6 @@
 use super::make_magnet_link;
 use crate::api::*;
+use anyhow::anyhow;
 use humansize::{format_size, DECIMAL};
 use leptos::html::Input;
 use leptos::*;
@@ -60,7 +61,7 @@ fn InsideRouter(cx: Scope) -> impl IntoView {
                             .map(|info_item| info_item.info_hash)
                             .collect(),
                     )
-                        .await;
+                    .await;
                     info!("{:?}", result);
                     result
                         .map(|ok| {
@@ -109,7 +110,7 @@ fn InsideRouter(cx: Scope) -> impl IntoView {
                     </Suspense>
                 }/>
                 <Route path="/:ih" view=move |cx| view! { cx,
-                    <TorrentInfo info={selected_torrent_info(cx)}/>
+                    <TorrentInfo/>
                 }/>
             </Routes>
         </ErrorBoundary>
@@ -127,24 +128,41 @@ fn SearchForm(cx: Scope) -> impl IntoView {
 }
 
 #[component]
-fn TorrentInfo(cx: Scope, info: Option<Option<InfoFiles>>) -> impl IntoView {
-    match info {
-        Some(Some(info)) => Some(
-            view! { cx,
-                <pre>
-                    { format!("{:#?}", info) }
-                </pre>
+fn TorrentInfo(cx: Scope) -> impl IntoView {
+    let info_files = create_local_resource(
+        cx,
+        move || use_params_map(cx).get().get("ih").cloned(),
+        |info_hash| async move {
+            match info_hash {
+                Some(info_hash) => Some(
+                    get_info_files(vec![info_hash.clone()])
+                        .await
+                        .map_err(SearchErrWrapper::new),
+                ),
+                None => None,
             }
-            .into_view(cx),
-        ),
-        None => Some(
-            view! { cx,
-                <p>"Loading..."</p>
-            }
-            .into_view(cx),
-        ),
-        _ => None,
+        },
+    );
+    move || match info_files.read(cx) {
+        None => Ok(view! { cx, <p>"Loading..."</p> }.into_view(cx)),
+        Some(None) => Err(Arc::new(gloo_net::Error::GlooError(
+            "missing ih param".into(),
+        ))),
+        Some(Some(Ok(info_files))) => Ok(view! { cx,
+            <pre>
+                { format!("{:#?}", info_files) }
+            </pre>
+        }
+        .into_view(cx)),
+        Some(Some(Err(err))) => Err(err),
     }
+    // view! { cx,
+    //     <Suspense fallback=move || view! { cx, <p>"Loading..."</p> }>
+    //         <pre>
+    //             { format!("{:#?}", info_files.read(cx).flatten().map(|result|result.ok()).flatten()) }
+    //         </pre>
+    //     </Suspense>
+    // }
 }
 
 #[component]
