@@ -31,7 +31,7 @@ fn list_errors(cx: Scope, errors: RwSignal<Errors>) -> impl IntoView {
     errors
         .get()
         .into_iter()
-        .map(|(_, e)| view! { cx, <li>{e.to_string()}</li>})
+        .map(|(_, e)| view! { cx, <li>{e.to_string()}</li> })
         .collect_view(cx)
 }
 
@@ -82,24 +82,30 @@ fn InsideRouter(cx: Scope) -> impl IntoView {
         },
     );
     view! { cx,
-        <h1>{ "DHT search" }</h1>
+        <h1>{"DHT search"}</h1>
         <SearchForm/>
-        <ErrorBoundary
-            fallback=|cx, errors| view! { cx,
-                <ul>
-                    { list_errors(cx, errors) }
-                </ul>
-            }
-        >
+        <ErrorBoundary fallback=|cx, errors| {
+            view! { cx, <ul>{list_errors(cx, errors)}</ul> }
+        }>
             <Routes>
-                <Route path="/" view=move |cx| view! { cx,
-                    <Suspense fallback=move || view! { cx, <p>"Searching..."</p> }>
-                        <SearchResult herp=search_resource info_files_resource/>
-                    </Suspense>
-                }/>
-                <Route path="/:ih" view=move |cx| view! { cx,
-                    <TorrentInfo/>
-                }/>
+                <Route
+                    path="/"
+                    view=move |cx| {
+                        view! { cx,
+                            <Suspense fallback=move || {
+                                view! { cx, <p>"Searching..."</p> }
+                            }>
+                                <SearchResult herp=search_resource info_files_resource/>
+                            </Suspense>
+                        }
+                    }
+                />
+                <Route
+                    path="/:ih"
+                    view=move |cx| {
+                        view! { cx, <TorrentInfo/> }
+                    }
+                />
             </Routes>
         </ErrorBoundary>
     }
@@ -140,11 +146,9 @@ fn TorrentInfo(cx: Scope) -> impl IntoView {
         None => Ok(view! { cx, <p>"Loading..."</p> }.into_view(cx)),
         Some(None) => Err(Arc::new(Error::Anyhow(anyhow!("missing ih param")))),
         Some(Some(Ok(info_files))) => Ok(view! { cx,
-            <a href={make_magnet_link(&info_files.info.info_hash)}>"magnet link"</a>
-            <pre>
-                { format!("{:#?}", info_files) }
-            </pre>
-        }
+                <a href=make_magnet_link(&info_files.info.info_hash)>"magnet link"</a>
+                <pre>{format!("{:#?}", info_files)}</pre>
+            }
         .into_view(cx)),
         Some(Some(Err(err))) => Err(err),
     }
@@ -160,9 +164,7 @@ fn SearchResult(
         Ok(None) => None,
         otherwise => Some(otherwise.map(|ok| {
             ok.map(|some| {
-                view! { cx,
-                    <TorrentsList search_value=some info_files=info_files_resource/>
-                }
+                view! { cx, <TorrentsList search_value=some info_files=info_files_resource/> }
             })
         })),
     })
@@ -216,11 +218,13 @@ fn TorrentsList(
                     .map(|info_files| view_file_types(file_types(info_files)));
                 view! { cx,
                     <tr>
-                        <td class="name"><a href={torrent.info_hash}>{torrent.name}</a></td>
+                        <td class="name">
+                            <a href=torrent.info_hash>{torrent.name}</a>
+                        </td>
                         <td>{torrent.swarm_info.seeders}</td>
                         <td>{format_size(torrent.size, DECIMAL)}</td>
                         <td>{torrent.age}</td>
-                        <td>{info_files.as_ref().map(|info_files|info_files.files.len())}</td>
+                        <td>{info_files.as_ref().map(|info_files| info_files.files.len())}</td>
                         <td>{file_types}</td>
                     </tr>
                 }
@@ -243,5 +247,5 @@ fn TorrentsList(
 }
 
 pub fn mount_to_body() {
-    leptos::mount_to_body(|cx| view! { cx,  <App/> })
+    leptos::mount_to_body(|cx| view! { cx, <App/> })
 }
