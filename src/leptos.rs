@@ -9,10 +9,19 @@ use log::info;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::iter;
+use std::ops::Deref;
 use std::path::Path;
 use std::result::Result;
 use std::sync::Arc;
 use web_sys::SubmitEvent;
+
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+    #[error(transparent)]
+    GlooNet(gloo_net::Error),
+    #[error(transparent)]
+    Anyhow(#[from] anyhow::Error),
+}
 
 type SearchErrWrapper<T> = Arc<T>;
 type CloneableApiError = Arc<gloo_net::Error>;
@@ -137,7 +146,7 @@ fn TorrentInfo(cx: Scope) -> impl IntoView {
                 Some(info_hash) => Some(
                     get_info_files(vec![info_hash.clone()])
                         .await
-                        .map_err(SearchErrWrapper::new),
+                        .map_err(|err| Arc::new(Error::GlooNet(err))),
                 ),
                 None => None,
             }
@@ -145,9 +154,7 @@ fn TorrentInfo(cx: Scope) -> impl IntoView {
     );
     move || match info_files.read(cx) {
         None => Ok(view! { cx, <p>"Loading..."</p> }.into_view(cx)),
-        Some(None) => Err(Arc::new(gloo_net::Error::GlooError(
-            "missing ih param".into(),
-        ))),
+        Some(None) => Err(Arc::new(Error::Anyhow(anyhow!("missing ih param")))),
         Some(Some(Ok(info_files))) => Ok(view! { cx,
             <pre>
                 { format!("{:#?}", info_files) }
@@ -156,13 +163,6 @@ fn TorrentInfo(cx: Scope) -> impl IntoView {
         .into_view(cx)),
         Some(Some(Err(err))) => Err(err),
     }
-    // view! { cx,
-    //     <Suspense fallback=move || view! { cx, <p>"Loading..."</p> }>
-    //         <pre>
-    //             { format!("{:#?}", info_files.read(cx).flatten().map(|result|result.ok()).flatten()) }
-    //         </pre>
-    //     </Suspense>
-    // }
 }
 
 #[component]

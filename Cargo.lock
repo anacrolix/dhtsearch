@@ -307,6 +307,7 @@ dependencies = [
  "log",
  "serde",
  "serde_json",
+ "thiserror",
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
