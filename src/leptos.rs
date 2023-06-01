@@ -116,7 +116,7 @@ fn SearchForm(cx: Scope) -> impl IntoView {
     let search_query = move || use_query_map(cx)().get("s").cloned().unwrap_or_default();
     view! { cx,
         <Form method="GET" action="">
-            <input type="search" name="s" value=search_query/>
+            <input type="search" name="s" prop:value=search_query/>
         </Form>
     }
 }
