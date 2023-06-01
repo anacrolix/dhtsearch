@@ -1,30 +1,26 @@
-use super::make_magnet_link;
 use crate::api::*;
 use anyhow::anyhow;
 use humansize::{format_size, DECIMAL};
-use leptos::html::Input;
 use leptos::*;
 use leptos_router::*;
 use log::info;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::iter;
-use std::ops::Deref;
 use std::path::Path;
 use std::result::Result;
 use std::sync::Arc;
-use web_sys::SubmitEvent;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error(transparent)]
-    GlooNet(gloo_net::Error),
+    GlooNet(#[from] gloo_net::Error),
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
 }
 
 type SearchErrWrapper<T> = Arc<T>;
-type CloneableApiError = Arc<gloo_net::Error>;
+type CloneableApiError = Arc<Error>;
 type SearchResultResource = Resource<String, Result<Option<InfosSearch>, CloneableApiError>>;
 type InfoFilesCache = HashMap<String, InfoFiles>;
 type InfoFilesResource =
@@ -84,24 +80,6 @@ fn InsideRouter(cx: Scope) -> impl IntoView {
             }
         },
     );
-    // let on_query_submit = move |ev: SubmitEvent| {
-    //     ev.prevent_default();
-    //     set_query(query_input().unwrap().value());
-    // };
-    let selected_torrent_info = move |cx| {
-        use_params_map(cx)
-            .with(|params| {
-                params
-                    .get("ih")
-                    .map(|info_hash| match info_files_resource.read(cx) {
-                        Some(Some(Ok(cache))) => Some(Some(cache.get(info_hash).cloned())),
-                        None => None,
-                        _ => Some(None),
-                    })
-            })
-            .flatten()
-            .flatten()
-    };
     view! { cx,
         <h1>{ "DHT search" }</h1>
         <SearchForm/>
@@ -146,7 +124,7 @@ fn TorrentInfo(cx: Scope) -> impl IntoView {
                 Some(info_hash) => Some(
                     get_info_files(vec![info_hash.clone()])
                         .await
-                        .map_err(|err| Arc::new(Error::GlooNet(err))),
+                        .map_err(Arc::new),
                 ),
                 None => None,
             }
@@ -171,18 +149,16 @@ fn SearchResult(
     herp: SearchResultResource,
     info_files_resource: InfoFilesResource,
 ) -> impl IntoView {
-    herp.read(cx).map(
-        |ready: Result<_, SearchErrWrapper<gloo_net::Error>>| match ready {
-            Ok(None) => None,
-            otherwise => Some(otherwise.map(|ok| {
-                ok.map(|some| {
-                    view! { cx,
-                        <TorrentsList search_value=some info_files=info_files_resource/>
-                    }
-                })
-            })),
-        },
-    )
+    herp.read(cx).map(|ready| match ready {
+        Ok(None) => None,
+        otherwise => Some(otherwise.map(|ok| {
+            ok.map(|some| {
+                view! { cx,
+                    <TorrentsList search_value=some info_files=info_files_resource/>
+                }
+            })
+        })),
+    })
 }
 
 fn base_file_type(base: &str) -> Option<&str> {

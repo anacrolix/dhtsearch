@@ -1,5 +1,8 @@
+use crate::leptos::Error;
 use gloo_net::http::Request;
+use gloo_net::http::Response;
 use log::info;
+use serde::de::DeserializeOwned;
 use serde::Deserialize;
 
 #[derive(Clone, PartialEq, Deserialize, Default)]
@@ -67,7 +70,7 @@ const DHT_INDEXER_URL: &str = if false {
     "https://dht-indexer-v2.fly.dev/"
 };
 
-pub type Result<T> = std::result::Result<T, gloo_net::Error>;
+pub type Result<T> = std::result::Result<T, crate::leptos::Error>;
 
 pub async fn search(query: String) -> Result<InfosSearch> {
     // return Err(GlooError("shit".to_string()));
@@ -77,7 +80,21 @@ pub async fn search(query: String) -> Result<InfosSearch> {
         .extend_pairs(&[("s", query)])
         .finish();
     info!("searching {:?}", url);
-    Request::get(url.as_ref()).send().await?.json().await
+    let response = Request::get(url.as_ref()).send().await?;
+    Ok(response.json::<InfosSearch>().await?)
+}
+
+async fn handle_go_json_response<T: DeserializeOwned>(
+    resp: Response,
+) -> std::result::Result<T, Error> {
+    if !resp.ok() {
+        return Err(Error::Anyhow(anyhow::anyhow!(std::str::from_utf8(
+            &*resp.binary().await?
+        )
+        .map_err(anyhow::Error::new)?
+        .to_owned())));
+    }
+    return resp.json().await.map_err(Into::into);
 }
 
 pub async fn get_info_files(info_hashes: Vec<String>) -> Result<InfoFilesPayload> {
@@ -87,15 +104,14 @@ pub async fn get_info_files(info_hashes: Vec<String>) -> Result<InfoFilesPayload
     let url = url::form_urlencoded::Serializer::new(url)
         .extend_pairs(info_hashes.iter().map(|ih| ("ih", ih)))
         .finish();
-    Request::get(url.as_ref())
+    let response = Request::get(url.as_ref())
         .header("Accept", "application/json")
         // I think this gets clobbered by the JS fetch API. I also doubt that lz4 is a valid
         // encoding for browsers by default.
         .header("Accept-Encoding", "lz4, br")
         .send()
-        .await?
-        .json()
-        .await
+        .await?;
+    handle_go_json_response(response).await
 }
 
 #[cfg(test)]
