@@ -30,9 +30,18 @@ fn list_errors(cx: Scope, errors: RwSignal<Errors>) -> impl IntoView {
 
 #[component]
 fn App(cx: Scope) -> impl IntoView {
-    let (query, set_query) = create_signal(cx, "".to_string());
-    let query_input: NodeRef<Input> = create_node_ref(cx);
-    let search_resource = create_local_resource(cx, query, |query| async move {
+    view! { cx,
+        <Router>
+            <InsideRouter/>
+        </Router>
+    }
+}
+
+#[component]
+fn InsideRouter(cx: Scope) -> impl IntoView {
+    let search_query = move || use_query_map(cx)().get("s").cloned().unwrap_or_default();
+    // let query_input: NodeRef<Input> = create_node_ref(cx);
+    let search_resource = create_local_resource(cx, search_query, |query| async move {
         if query.is_empty() {
             return Ok(None);
         }
@@ -51,7 +60,7 @@ fn App(cx: Scope) -> impl IntoView {
                             .map(|info_item| info_item.info_hash)
                             .collect(),
                     )
-                    .await;
+                        .await;
                     info!("{:?}", result);
                     result
                         .map(|ok| {
@@ -65,10 +74,10 @@ fn App(cx: Scope) -> impl IntoView {
             }
         },
     );
-    let on_query_submit = move |ev: SubmitEvent| {
-        ev.prevent_default();
-        set_query(query_input().unwrap().value());
-    };
+    // let on_query_submit = move |ev: SubmitEvent| {
+    //     ev.prevent_default();
+    //     set_query(query_input().unwrap().value());
+    // };
     let selected_torrent_info = move |cx| {
         use_params_map(cx)
             .with(|params| {
@@ -84,30 +93,36 @@ fn App(cx: Scope) -> impl IntoView {
             .flatten()
     };
     view! { cx,
-        <Router>
-            <h1>{ "DHT search" }</h1>
-            <form on:submit=on_query_submit>
-                <input type="text" node_ref=query_input/>
-            </form>
-            <ErrorBoundary
-                fallback=|cx, errors| view! { cx,
-                    <ul>
-                        { list_errors(cx, errors) }
-                    </ul>
-                }
-            >
-                <Routes>
-                    <Route path="/" view=move |cx| view! { cx,
-                        <Suspense fallback=move || view! { cx, <p>"Searching..."</p> }>
-                            <SearchResult herp=search_resource info_files_resource/>
-                        </Suspense>
-                    }/>
-                    <Route path="/:ih" view=move |cx| view! { cx,
-                        <TorrentInfo info={selected_torrent_info(cx)}/>
-                    }/>
-                </Routes>
-            </ErrorBoundary>
-        </Router>
+        <h1>{ "DHT search" }</h1>
+        <SearchForm/>
+        <ErrorBoundary
+            fallback=|cx, errors| view! { cx,
+                <ul>
+                    { list_errors(cx, errors) }
+                </ul>
+            }
+        >
+            <Routes>
+                <Route path="/" view=move |cx| view! { cx,
+                    <Suspense fallback=move || view! { cx, <p>"Searching..."</p> }>
+                        <SearchResult herp=search_resource info_files_resource/>
+                    </Suspense>
+                }/>
+                <Route path="/:ih" view=move |cx| view! { cx,
+                    <TorrentInfo info={selected_torrent_info(cx)}/>
+                }/>
+            </Routes>
+        </ErrorBoundary>
+    }
+}
+
+#[component]
+fn SearchForm(cx: Scope) -> impl IntoView {
+    let search_query = move || use_query_map(cx)().get("s").cloned().unwrap_or_default();
+    view! { cx,
+        <Form method="GET" action="">
+            <input type="search" name="s" value=search_query/>
+        </Form>
     }
 }
 
