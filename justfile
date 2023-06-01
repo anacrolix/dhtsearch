@@ -10,7 +10,9 @@ deploy: build
 build: build-leptos
 
 build-leptos:
-	trunk build --dist docs/leptos --release --public-url /leptos/
+	#!/bin/bash
+	trunk build --dist docs --release
+	echo -n wasm.dht.lol > docs/CNAME
 
 build-yew:
 	trunk build --dist docs/yew --release --public-url /yew/ --features yew --no-default-features
