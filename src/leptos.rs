@@ -1,4 +1,3 @@
-use super::make_magnet_link;
 use super::*;
 use crate::api::*;
 use ::leptos::*;
@@ -6,9 +5,8 @@ use anyhow::anyhow;
 use humansize::{format_size, DECIMAL};
 use leptos_router::*;
 use log::info;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ffi::OsStr;
-use std::iter;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -157,9 +155,9 @@ fn TorrentInfo(cx: Scope) -> impl IntoView {
         None => Ok(view! { cx, <p>"Loading..."</p> }.into_view(cx)),
         Some(None) => Err(Arc::new(Error::Anyhow(anyhow!("missing ih param")))),
         Some(Some(Ok(info_files))) => Ok(view! { cx,
-                <a href=make_magnet_link(&info_files.info.info_hash)>"magnet link"</a>
-                <pre>{format!("{:#?}", info_files)}</pre>
-            }
+            <a href=make_magnet_link(&info_files.info.info_hash)>"magnet link"</a>
+            <pre>{format!("{:#?}", info_files)}</pre>
+        }
         .into_view(cx)),
         Some(Some(Err(err))) => Err(err),
     }
@@ -181,35 +179,50 @@ fn SearchResult(
     })
 }
 
-fn base_file_type<S>(base: &S) -> Option<&str>
+fn base_file_type<S>(base: &S) -> Option<String>
 where
     S: AsRef<OsStr> + ?Sized,
 {
-    Path::new(base).extension().and_then(OsStr::to_str)
+    Path::new(base)
+        .extension()
+        .and_then(OsStr::to_str)
+        .map(str::to_lowercase)
 }
 
-fn file_type(file: &File) -> Option<&str> {
+fn file_path_base(file: &File) -> Option<&str> {
     file.path
         .as_ref()
         .and_then(|parts| parts.last())
-        .and_then(base_file_type)
+        .map(|last| last.as_str())
 }
 
-fn file_types(info_files: &InfoFiles) -> Vec<&str> {
-    let mut all: Vec<_> = iter::once(base_file_type(info_files.info.name.as_str()))
-        .chain(info_files.files.iter().map(file_type))
-        .flatten()
-        .take(7)
-        .collect();
-    all.sort();
-    all.dedup();
-    all
+fn file_types(info_files: &InfoFiles) -> Vec<String> {
+    if let [File { path: None, .. }] = info_files.files[..] {
+        return base_file_type(info_files.info.name.as_str())
+            .into_iter()
+            .collect();
+    }
+    let mut files = info_files
+        .files
+        .iter()
+        .filter_map(|file| {
+            file_path_base(file)
+                .and_then(base_file_type)
+                .map(|ext| (file.length, ext))
+        })
+        .collect::<Vec<_>>();
+    files.sort();
+    files.reverse();
+    let mut seen = HashSet::new();
+    files.retain(|(_length, ext)| seen.insert(ext.clone()));
+    files.truncate(7);
+    files.into_iter().map(|elem| elem.1).collect()
 }
 
-fn view_file_types(cx: Scope, file_types: Vec<&str>) -> impl IntoView {
+fn view_file_types(cx: Scope, file_types: impl IntoIterator<Item = String>) -> impl IntoView {
     file_types
         .into_iter()
-        .map(|file_type| view! { cx, <span class="badge">{file_type.to_owned()}</span> })
+        .map(|file_type| view! { cx, <span class="file-type">{file_type}</span> })
         .collect_view(cx)
 }
 
