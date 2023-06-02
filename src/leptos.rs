@@ -1,31 +1,23 @@
 use super::make_magnet_link;
+use super::*;
 use crate::api::*;
+use ::leptos::*;
 use anyhow::anyhow;
 use humansize::{format_size, DECIMAL};
-use leptos::*;
 use leptos_router::*;
 use log::info;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::iter;
 use std::path::Path;
-use std::result::Result;
+use std::result::Result as StdResult;
 use std::sync::Arc;
-
-#[derive(thiserror::Error, Debug)]
-pub enum Error {
-    #[error(transparent)]
-    GlooNet(#[from] gloo_net::Error),
-    #[error(transparent)]
-    Anyhow(#[from] anyhow::Error),
-}
 
 type SearchErrWrapper<T> = Arc<T>;
 type CloneableApiError = Arc<Error>;
-type SearchResultResource = Resource<String, Result<Option<InfosSearch>, CloneableApiError>>;
+type SearchResultResource = Resource<String, Result<Option<InfosSearch>>>;
 type InfoFilesCache = HashMap<String, InfoFiles>;
-type InfoFilesResource =
-    Resource<Option<InfosSearch>, Option<Result<InfoFilesCache, CloneableApiError>>>;
+type InfoFilesResource = Resource<Option<InfosSearch>, Option<Result<InfoFilesCache>>>;
 
 fn list_errors(cx: Scope, errors: RwSignal<Errors>) -> impl IntoView {
     errors
@@ -44,15 +36,55 @@ fn App(cx: Scope) -> impl IntoView {
     }
 }
 
+fn get_needed_info_hashes(
+    cx: Scope,
+    torrent_ih: Option<String>,
+    search_result: SearchResultResource,
+) -> Vec<String> {
+    search_result
+        .read(cx)
+        .map(|result| result.ok())
+        .flatten()
+        .flatten()
+        .unwrap_or_default()
+        .items
+        .into_iter()
+        .map(|item| item.info_hash)
+        .chain(torrent_ih.into_iter())
+        .collect()
+}
+
+fn get_missing_info_hashes(cache: &InfoFilesCache, mut needed: Vec<String>) -> Vec<String> {
+    needed.retain(|ih| !cache.contains_key(ih));
+    needed
+}
+
+async fn fetch_info_files_into_cache(
+    cache_signal: RwSignal<InfoFilesCache>,
+    info_hashes: Vec<String>,
+) -> Result<()> {
+    let payload = get_info_files(info_hashes).await?;
+    cache_signal.update(|cache| {
+        for info_files in payload {
+            cache.insert(info_files.info.info_hash.clone(), info_files);
+        }
+    });
+    Ok(())
+}
+
 #[component]
 fn InsideRouter(cx: Scope) -> impl IntoView {
     let search_query = move || use_query_map(cx)().get("s").cloned().unwrap_or_default();
-    let search_resource = create_local_resource(cx, search_query, |query| async move {
-        if query.is_empty() {
-            return Ok(None);
-        }
-        Ok(Some(search(query).await.map_err(SearchErrWrapper::new)?))
-    });
+    let torrent_ih = move || use_params_map(cx).get().get("ih").cloned();
+    let search_resource: SearchResultResource =
+        create_local_resource(cx, search_query, |query| async move {
+            if query.is_empty() {
+                return Ok(None);
+            }
+            Ok(Some(search(query).await?))
+        });
+    let info_files_cache = create_rw_signal(cx, InfoFilesCache::new());
+    create_action(cx, move |()| async move {});
     let info_files_resource: InfoFilesResource = create_local_resource(
         cx,
         move || search_resource.read(cx).and_then(Result::ok).flatten(),
@@ -68,13 +100,11 @@ fn InsideRouter(cx: Scope) -> impl IntoView {
                     )
                     .await;
                     info!("{:?}", result);
-                    result
-                        .map(|ok| {
-                            ok.into_iter()
-                                .map(|info_files| (info_files.info.info_hash.clone(), info_files))
-                                .collect::<InfoFilesCache>()
-                        })
-                        .map_err(SearchErrWrapper::new)
+                    result.map(|ok| {
+                        ok.into_iter()
+                            .map(|info_files| (info_files.info.info_hash.clone(), info_files))
+                            .collect::<InfoFilesCache>()
+                    })
                 }),
                 None => None,
             }
@@ -127,16 +157,11 @@ fn TorrentInfo(cx: Scope) -> impl IntoView {
         move || use_params_map(cx).get().get("ih").cloned(),
         |info_hash| async move {
             match info_hash {
-                Some(info_hash) => Some(
-                    match get_info_files(vec![info_hash.clone()]).await {
-                        Ok(payload) if !payload.is_empty() => {
-                            Ok(payload.into_iter().next().unwrap())
-                        }
-                        Ok(_) => Err(anyhow!("unknown infohash").into()),
-                        Err(err) => Err(err),
-                    }
-                    .map_err(Arc::new),
-                ),
+                Some(info_hash) => Some(match get_info_files(vec![info_hash.clone()]).await {
+                    Ok(payload) if !payload.is_empty() => Ok(payload.into_iter().next().unwrap()),
+                    Ok(_) => Err(Arc::new(anyhow!("unknown infohash").into())),
+                    Err(err) => Err(err),
+                }),
                 None => None,
             }
         },
@@ -145,9 +170,9 @@ fn TorrentInfo(cx: Scope) -> impl IntoView {
         None => Ok(view! { cx, <p>"Loading..."</p> }.into_view(cx)),
         Some(None) => Err(Arc::new(Error::Anyhow(anyhow!("missing ih param")))),
         Some(Some(Ok(info_files))) => Ok(view! { cx,
-                <a href=make_magnet_link(&info_files.info.info_hash)>"magnet link"</a>
-                <pre>{format!("{:#?}", info_files)}</pre>
-            }
+            <a href=make_magnet_link(&info_files.info.info_hash)>"magnet link"</a>
+            <pre>{format!("{:#?}", info_files)}</pre>
+        }
         .into_view(cx)),
         Some(Some(Err(err))) => Err(err),
     }
@@ -205,7 +230,7 @@ fn view_file_types(cx: Scope, file_types: Vec<&str>) -> impl IntoView {
 fn TorrentsList(
     cx: Scope,
     search_value: InfosSearch,
-    info_files: Resource<Option<InfosSearch>, Option<Result<InfoFilesCache, CloneableApiError>>>,
+    info_files: Resource<Option<InfosSearch>, Option<StdResult<InfoFilesCache, CloneableApiError>>>,
 ) -> impl IntoView {
     let rows = {
         let cache: InfoFilesCache = info_files
@@ -252,5 +277,5 @@ fn TorrentsList(
 }
 
 pub fn mount_to_body() {
-    leptos::mount_to_body(|cx| view! { cx, <App/> })
+    ::leptos::mount_to_body(|cx| view! { cx, <App/> })
 }

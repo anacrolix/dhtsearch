@@ -1,4 +1,4 @@
-use crate::leptos::Error;
+use super::*;
 use gloo_net::http::Request;
 use gloo_net::http::Response;
 use log::info;
@@ -75,8 +75,6 @@ const DHT_INDEXER_URL: &str = if false {
     "https://dht-indexer-v2.fly.dev/"
 };
 
-pub type Result<T> = std::result::Result<T, crate::leptos::Error>;
-
 pub async fn search(query: String) -> Result<InfosSearch> {
     // return Err(GlooError("shit".to_string()));
     let mut url = DHT_INDEXER_URL.to_string();
@@ -85,8 +83,15 @@ pub async fn search(query: String) -> Result<InfosSearch> {
         .extend_pairs(&[("s", query)])
         .finish();
     info!("searching {:?}", url);
-    let response = Request::get(url.as_ref()).send().await?;
-    Ok(response.json::<InfosSearch>().await?)
+    let response = Request::get(url.as_ref())
+        .send()
+        .await
+        .map_err(|err| Arc::new(err.into()))?;
+    Ok(response
+        .json::<InfosSearch>()
+        .await
+        .map_err(Into::into)
+        .map_err(Arc::new)?)
 }
 
 async fn handle_go_json_response<T: DeserializeOwned>(
@@ -115,8 +120,10 @@ pub async fn get_info_files(info_hashes: Vec<String>) -> Result<InfoFilesPayload
         // encoding for browsers by default.
         .header("Accept-Encoding", "lz4, br")
         .send()
-        .await?;
-    handle_go_json_response(response).await
+        .await
+        .map_err(Into::into)
+        .map_err(Arc::new)?;
+    handle_go_json_response(response).await.map_err(Arc::new)
 }
 
 #[cfg(test)]
