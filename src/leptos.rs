@@ -179,7 +179,7 @@ fn TorrentInfo(
     }
 }
 
-#[derive(Eq, PartialEq, Hash)]
+#[derive(Eq, PartialEq, Hash, Debug)]
 struct FileRow {
     path: Vec<String>,
     dir: bool,
@@ -235,26 +235,21 @@ fn file_rows(files: Vec<File>) -> Vec<FileRow> {
 }
 
 fn dir_file_rows(files: Vec<File>) -> Vec<FileRow> {
-    files
-        .iter()
-        .filter_map(|file| {
-            let parts = match &file.path {
-                None => return None,
-                Some(parts) => parts,
-            };
-            let dirs = &parts[0..parts.len() - 1];
-            if dirs.is_empty() {
-                return None;
-            }
-            Some(FileRow {
-                path: dirs.into(),
+    let mut ret: Vec<_> = files
+        .into_iter()
+        .flat_map(|file| {
+            let path = file.path.unwrap_or_default();
+            (1..path.len()).into_iter().map(move |end| FileRow {
+                path: path[0..end].to_owned(),
                 dir: true,
                 size: None,
             })
         })
         .collect::<HashSet<_>>()
         .into_iter()
-        .collect()
+        .collect();
+    ret.sort();
+    ret
 }
 
 #[component]
@@ -391,4 +386,41 @@ fn TorrentsList(
 
 pub fn mount_to_body() {
     ::leptos::mount_to_body(|cx| view! { cx, <App/> })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn vec_strings(input: &[&str]) -> Vec<String> {
+        input.into_iter().map(|x|x.to_string()).collect()
+    }
+
+    fn dir_file_row(input: &[&str]) -> FileRow {
+        FileRow {
+            path: vec_strings(input),
+            dir: true,
+            size: None,
+        }
+    }
+
+    #[test]
+    fn test_dir_file_rows() {
+        assert_eq!(
+            dir_file_rows(vec![File {
+                path: Some(
+                    vec!["a", "b", "c", "d"]
+                        .into_iter()
+                        .map(ToOwned::to_owned)
+                        .collect()
+                ),
+                length: 42,
+            }]),
+            vec![
+                dir_file_row(&["a"]),
+                dir_file_row(&["a", "b"]),
+                dir_file_row(&["a", "b", "c"]),
+            ]
+        );
+    }
 }

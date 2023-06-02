@@ -27,7 +27,7 @@ icu_testdata = "1.2.0"
 [dev-dependencies]
 serde_json = "1.0"
 env_logger = "*"
-test-env-log = "0.2.8"
+test-log = "*"
 
 [features]
 default = ["leptos"]
