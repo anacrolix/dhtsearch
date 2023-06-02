@@ -8,10 +8,9 @@ use log::info;
 use std::collections::{HashMap, HashSet};
 use std::ffi::OsStr;
 use std::path::Path;
-use std::sync::Arc;
 
 type SearchResultResource = Resource<String, Result<Option<InfosSearch>>>;
-type InfoFilesCache = HashMap<String, InfoFiles>;
+type InfoFilesCache = HashMap<String, Option<Result<InfoFiles>>>;
 
 fn list_errors(cx: Scope, errors: RwSignal<Errors>) -> impl IntoView {
     errors
@@ -56,13 +55,23 @@ async fn fetch_info_files_into_cache(
     cache_signal: RwSignal<InfoFilesCache>,
     info_hashes: Vec<String>,
 ) -> Result<()> {
-    let payload = get_info_files(info_hashes).await?;
-    if payload.is_empty() {
-        return Ok(());
-    }
-    cache_signal.update(|cache| {
-        for info_files in payload {
-            cache.insert(info_files.info.info_hash.clone(), info_files);
+    let result = get_info_files(&info_hashes).await;
+    cache_signal.update(|cache| match result {
+        Ok(payload) => {
+            for info_hash in info_hashes {
+                cache.insert(
+                    info_hash,
+                    Some(Err(anyhow!("not included in response").into())),
+                );
+            }
+            for info_files in payload {
+                cache.insert(info_files.info.info_hash.clone(), Some(Ok(info_files)));
+            }
+        }
+        Err(err) => {
+            for info_hash in info_hashes {
+                cache.insert(info_hash, Some(Err(err.clone())));
+            }
         }
     });
     Ok(())
@@ -71,7 +80,7 @@ async fn fetch_info_files_into_cache(
 #[component]
 fn InsideRouter(cx: Scope) -> impl IntoView {
     let search_query = move || use_query_map(cx)().get("s").cloned().unwrap_or_default();
-    let torrent_ih = move || use_params_map(cx).get().get("ih").cloned();
+    let torrent_ih = create_rw_signal(cx, None);
     let search_resource: SearchResultResource =
         create_local_resource(cx, search_query, |query| async move {
             if query.is_empty() {
@@ -117,7 +126,13 @@ fn InsideRouter(cx: Scope) -> impl IntoView {
                 <Route
                     path="/:ih"
                     view=move |cx| {
-                        view! { cx, <TorrentInfo/> }
+                        torrent_ih.set(use_params_map(cx).get().get("ih").cloned());
+                        view! { cx,
+                            <TorrentInfo
+                                info_files_cache=info_files_cache.read_only()
+                                info_hash=torrent_ih.derive_signal(cx)
+                            />
+                        }
                     }
                 />
             </Routes>
@@ -136,32 +151,27 @@ fn SearchForm(cx: Scope) -> impl IntoView {
 }
 
 #[component]
-fn TorrentInfo(cx: Scope) -> impl IntoView {
-    let info_files = create_local_resource(
-        cx,
-        move || use_params_map(cx).get().get("ih").cloned(),
-        |info_hash| async move {
-            match info_hash {
-                Some(info_hash) => Some(match get_info_files(vec![info_hash.clone()]).await {
-                    Ok(payload) if !payload.is_empty() => Ok(payload.into_iter().next().unwrap()),
-                    Ok(_) => Err(Arc::new(anyhow!("unknown infohash").into())),
-                    Err(err) => Err(err),
-                }),
-                None => None,
-            }
-        },
-    );
-    move || match info_files.read(cx) {
-        None => Ok(view! { cx, <p>"Loading..."</p> }.into_view(cx)),
-        Some(None) => Err(Arc::new(Error::Anyhow(anyhow!("missing ih param")))),
-        Some(Some(Ok(info_files))) => Ok(view! { cx,
-                <a href=make_magnet_link(&info_files.info.info_hash)>"magnet link"</a>
-                <pre>{format!("{:#?}", info_files.info)}</pre>
-                <TorrentFiles files=info_files.files/>
-            }
-        .into_view(cx)),
-        Some(Some(Err(err))) => Err(err),
-    }
+fn TorrentInfo(
+    cx: Scope,
+    info_files_cache: ReadSignal<InfoFilesCache>,
+    info_hash: Signal<Option<String>>,
+) -> impl IntoView {
+    move || info_hash.with(|info_hash| {
+        info!("torrent info with {:?}", info_hash);
+        info_hash
+            .as_ref()
+            .map(|info_hash| match info_files_cache().get(info_hash) {
+                None => Ok(view! { cx, <p>"Loading..."</p> }.into_view(cx)),
+                Some(None) => Err(anyhow!("missing ih param").into()),
+                Some(Some(Ok(info_files))) => Ok(view! { cx,
+                    <a href=make_magnet_link(&info_files.info.info_hash)>"magnet link"</a>
+                    <pre>{format!("{:#?}", info_files.info)}</pre>
+                    <TorrentFiles files=info_files.files.clone()/>
+                }
+                .into_view(cx)),
+                Some(Some(Err(err))) => Err(err.clone()),
+            })
+    })
 }
 
 #[derive(Eq, PartialEq, Hash, Ord, PartialOrd)]
@@ -211,12 +221,16 @@ fn TorrentFiles(cx: Scope, files: Vec<File>) -> impl IntoView {
     let mut rows = dir_file_rows(files.clone());
     rows.extend(file_rows(files));
     rows.sort();
-    rows.into_iter().map(|row| view! { cx,
-            <tr>
-                <td style:padding-left=format!("{}em", row.path.len())>{row.path.last()}</td>
-                <td>{row.size}</td>
-            </tr>
-        }).collect_view(cx)
+    rows.into_iter()
+        .map(|row| {
+            view! { cx,
+                <tr>
+                    <td style:padding-left=format!("{}em", row.path.len())>{row.path.last()}</td>
+                    <td>{row.size}</td>
+                </tr>
+            }
+        })
+        .collect_view(cx)
 }
 
 #[component]
@@ -295,7 +309,12 @@ fn TorrentsList(
             .items
             .into_iter()
             .map(|torrent| {
-                let info_files = cache.get(&torrent.info_hash);
+                let info_files = cache
+                    .get(&torrent.info_hash)
+                    .cloned()
+                    .flatten()
+                    .map(|result| result.ok())
+                    .flatten();
                 let file_types = info_files
                     .as_ref()
                     .map(|info_files| view_file_types(cx, file_types(info_files)));

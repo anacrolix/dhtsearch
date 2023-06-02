@@ -83,15 +83,7 @@ pub async fn search(query: String) -> Result<InfosSearch> {
         .extend_pairs(&[("s", query)])
         .finish();
     info!("searching {:?}", url);
-    let response = Request::get(url.as_ref())
-        .send()
-        .await
-        .map_err(|err| Arc::new(err.into()))?;
-    response
-        .json::<InfosSearch>()
-        .await
-        .map_err(Into::into)
-        .map_err(Arc::new)
+    Ok(Request::get(url.as_ref()).send().await?.json().await?)
 }
 
 async fn handle_go_json_response<T: DeserializeOwned>(
@@ -107,7 +99,7 @@ async fn handle_go_json_response<T: DeserializeOwned>(
     resp.json().await.map_err(Into::into)
 }
 
-pub async fn get_info_files(info_hashes: Vec<String>) -> Result<InfoFilesPayload> {
+pub async fn get_info_files(info_hashes: &Vec<String>) -> Result<InfoFilesPayload> {
     // return Err(GlooError("shit".to_string()));
     let mut url = DHT_INDEXER_URL.to_string();
     url.push_str("infoFiles?");
@@ -123,7 +115,7 @@ pub async fn get_info_files(info_hashes: Vec<String>) -> Result<InfoFilesPayload
         .await
         .map_err(Into::into)
         .map_err(Arc::new)?;
-    handle_go_json_response(response).await.map_err(Arc::new)
+    handle_go_json_response(response).await.map_err(Into::into)
 }
 
 #[cfg(test)]
