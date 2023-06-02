@@ -47,7 +47,6 @@ fn App(cx: Scope) -> impl IntoView {
 #[component]
 fn InsideRouter(cx: Scope) -> impl IntoView {
     let search_query = move || use_query_map(cx)().get("s").cloned().unwrap_or_default();
-    // let query_input: NodeRef<Input> = create_node_ref(cx);
     let search_resource = create_local_resource(cx, search_query, |query| async move {
         if query.is_empty() {
             return Ok(None);

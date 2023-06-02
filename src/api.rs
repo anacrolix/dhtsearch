@@ -50,7 +50,7 @@ type InfoFilesPayload = Vec<InfoFiles>;
 #[serde(rename_all = "PascalCase")]
 pub struct Info {
     pub info_id: i64,
-    // This is sent as base64 from Go, might need a custom module.
+    // This is sent as base64 from Go.
     pub name: InfoName,
     pub info_hash: String,
     pub age: String,
