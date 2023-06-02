@@ -13,7 +13,6 @@ use std::path::Path;
 use std::result::Result as StdResult;
 use std::sync::Arc;
 
-type SearchErrWrapper<T> = Arc<T>;
 type CloneableApiError = Arc<Error>;
 type SearchResultResource = Resource<String, Result<Option<InfosSearch>>>;
 type InfoFilesCache = HashMap<String, InfoFiles>;
@@ -64,6 +63,9 @@ async fn fetch_info_files_into_cache(
     info_hashes: Vec<String>,
 ) -> Result<()> {
     let payload = get_info_files(info_hashes).await?;
+    if payload.is_empty() {
+        return Ok(());
+    }
     cache_signal.update(|cache| {
         for info_files in payload {
             cache.insert(info_files.info.info_hash.clone(), info_files);
@@ -84,7 +86,21 @@ fn InsideRouter(cx: Scope) -> impl IntoView {
             Ok(Some(search(query).await?))
         });
     let info_files_cache = create_rw_signal(cx, InfoFilesCache::new());
-    create_action(cx, move |()| async move {});
+    create_effect(cx, move |_| {
+        info!("missing info files effect running");
+        let needed = get_needed_info_hashes(cx, torrent_ih(), search_resource);
+        info_files_cache.with(|cache| {
+            let missing = get_missing_info_hashes(cache, needed);
+            if missing.is_empty() {
+                return;
+            }
+            spawn_local(async move {
+                fetch_info_files_into_cache(info_files_cache, missing)
+                    .await
+                    .expect("fetch info files into cache failed")
+            });
+        });
+    });
     let info_files_resource: InfoFilesResource = create_local_resource(
         cx,
         move || search_resource.read(cx).and_then(Result::ok).flatten(),
