@@ -99,8 +99,7 @@ async fn handle_go_json_response<T: DeserializeOwned>(
     resp.json().await.map_err(Into::into)
 }
 
-pub async fn get_info_files(info_hashes: &Vec<String>) -> Result<InfoFilesPayload> {
-    // return Err(GlooError("shit".to_string()));
+pub async fn get_info_files(info_hashes: &[String]) -> Result<InfoFilesPayload> {
     let mut url = DHT_INDEXER_URL.to_string();
     url.push_str("infoFiles?");
     let url = url::form_urlencoded::Serializer::new(url)

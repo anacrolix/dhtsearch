@@ -168,10 +168,10 @@ fn TorrentInfo(
                     None => Ok(view! { cx, <p>"Loading..."</p> }.into_view(cx)),
                     Some(None) => Err(anyhow!("missing ih param").into()),
                     Some(Some(Ok(info_files))) => Ok(view! { cx,
-                        <a href=make_magnet_link(&info_files.info.info_hash)>"magnet link"</a>
-                        <pre>{format!("{:#?}", info_files.info)}</pre>
-                        <TorrentFiles files=info_files.files.clone()/>
-                    }
+                            <a href=make_magnet_link(&info_files.info.info_hash)>"magnet link"</a>
+                            <pre>{format!("{:#?}", info_files.info)}</pre>
+                            <TorrentFiles files=info_files.files.clone()/>
+                        }
                     .into_view(cx)),
                     Some(Some(Err(err))) => Err(err.clone()),
                 })
@@ -239,7 +239,7 @@ fn dir_file_rows(files: Vec<File>) -> Vec<FileRow> {
         .into_iter()
         .flat_map(|file| {
             let path = file.path.unwrap_or_default();
-            (1..path.len()).into_iter().map(move |end| FileRow {
+            (1..path.len()).map(move |end| FileRow {
                 path: path[0..end].to_owned(),
                 dir: true,
                 size: None,
@@ -262,7 +262,7 @@ fn TorrentFiles(cx: Scope, files: Vec<File>) -> impl IntoView {
             view! { cx,
                 <tr>
                     <td style:padding-left=format!("{}em", row.path.len())>{row.path.last()}</td>
-                    <td>{row.size}</td>
+                    <td>{row.size.map(|size| format_size(size as u64, DECIMAL))}</td>
                 </tr>
             }
         })
@@ -349,8 +349,7 @@ fn TorrentsList(
                     .get(&torrent.info_hash)
                     .cloned()
                     .flatten()
-                    .map(|result| result.ok())
-                    .flatten();
+                    .and_then(|result| result.ok());
                 let file_types = info_files
                     .as_ref()
                     .map(|info_files| view_file_types(cx, file_types(info_files)));
@@ -393,7 +392,7 @@ mod tests {
     use super::*;
 
     fn vec_strings(input: &[&str]) -> Vec<String> {
-        input.into_iter().map(|x|x.to_string()).collect()
+        input.into_iter().map(|x| x.to_string()).collect()
     }
 
     fn dir_file_row(input: &[&str]) -> FileRow {
