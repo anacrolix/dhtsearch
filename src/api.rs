@@ -87,11 +87,11 @@ pub async fn search(query: String) -> Result<InfosSearch> {
         .send()
         .await
         .map_err(|err| Arc::new(err.into()))?;
-    Ok(response
+    response
         .json::<InfosSearch>()
         .await
         .map_err(Into::into)
-        .map_err(Arc::new)?)
+        .map_err(Arc::new)
 }
 
 async fn handle_go_json_response<T: DeserializeOwned>(
@@ -99,12 +99,12 @@ async fn handle_go_json_response<T: DeserializeOwned>(
 ) -> std::result::Result<T, Error> {
     if !resp.ok() {
         return Err(Error::Anyhow(anyhow::anyhow!(std::str::from_utf8(
-            &*resp.binary().await?
+            &resp.binary().await?
         )
         .map_err(anyhow::Error::new)?
         .to_owned())));
     }
-    return resp.json().await.map_err(Into::into);
+    resp.json().await.map_err(Into::into)
 }
 
 pub async fn get_info_files(info_hashes: Vec<String>) -> Result<InfoFilesPayload> {

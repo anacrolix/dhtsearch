@@ -10,13 +10,10 @@ use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::iter;
 use std::path::Path;
-use std::result::Result as StdResult;
 use std::sync::Arc;
 
-type CloneableApiError = Arc<Error>;
 type SearchResultResource = Resource<String, Result<Option<InfosSearch>>>;
 type InfoFilesCache = HashMap<String, InfoFiles>;
-type InfoFilesResource = Resource<Option<InfosSearch>, Option<Result<InfoFilesCache>>>;
 
 fn list_errors(cx: Scope, errors: RwSignal<Errors>) -> impl IntoView {
     errors
@@ -42,8 +39,7 @@ fn get_needed_info_hashes(
 ) -> Vec<String> {
     search_result
         .read(cx)
-        .map(|result| result.ok())
-        .flatten()
+        .and_then(Result::ok)
         .flatten()
         .unwrap_or_default()
         .items
@@ -101,31 +97,6 @@ fn InsideRouter(cx: Scope) -> impl IntoView {
             });
         });
     });
-    let info_files_resource: InfoFilesResource = create_local_resource(
-        cx,
-        move || search_resource.read(cx).and_then(Result::ok).flatten(),
-        |search_resource_value: Option<InfosSearch>| async move {
-            match search_resource_value {
-                Some(infos_search) => Some({
-                    let result = get_info_files(
-                        infos_search
-                            .items
-                            .into_iter()
-                            .map(|info_item| info_item.info_hash)
-                            .collect(),
-                    )
-                    .await;
-                    info!("{:?}", result);
-                    result.map(|ok| {
-                        ok.into_iter()
-                            .map(|info_files| (info_files.info.info_hash.clone(), info_files))
-                            .collect::<InfoFilesCache>()
-                    })
-                }),
-                None => None,
-            }
-        },
-    );
     view! { cx,
         <h1>{"DHT search"}</h1>
         <SearchForm/>
@@ -140,7 +111,7 @@ fn InsideRouter(cx: Scope) -> impl IntoView {
                             <Suspense fallback=move || {
                                 view! { cx, <p>"Searching..."</p> }
                             }>
-                                <SearchResult herp=search_resource info_files_resource/>
+                                <SearchResult herp=search_resource info_files_cache=info_files_cache.read_only()/>
                             </Suspense>
                         }
                     }
@@ -186,9 +157,9 @@ fn TorrentInfo(cx: Scope) -> impl IntoView {
         None => Ok(view! { cx, <p>"Loading..."</p> }.into_view(cx)),
         Some(None) => Err(Arc::new(Error::Anyhow(anyhow!("missing ih param")))),
         Some(Some(Ok(info_files))) => Ok(view! { cx,
-            <a href=make_magnet_link(&info_files.info.info_hash)>"magnet link"</a>
-            <pre>{format!("{:#?}", info_files)}</pre>
-        }
+                <a href=make_magnet_link(&info_files.info.info_hash)>"magnet link"</a>
+                <pre>{format!("{:#?}", info_files)}</pre>
+            }
         .into_view(cx)),
         Some(Some(Err(err))) => Err(err),
     }
@@ -198,13 +169,13 @@ fn TorrentInfo(cx: Scope) -> impl IntoView {
 fn SearchResult(
     cx: Scope,
     herp: SearchResultResource,
-    info_files_resource: InfoFilesResource,
+    info_files_cache: ReadSignal<InfoFilesCache>,
 ) -> impl IntoView {
     herp.read(cx).map(|ready| match ready {
         Ok(None) => None,
         otherwise => Some(otherwise.map(|ok| {
             ok.map(|some| {
-                view! { cx, <TorrentsList search_value=some info_files=info_files_resource/> }
+                view! { cx, <TorrentsList search_value=some info_files_cache/> }
             })
         })),
     })
@@ -221,7 +192,7 @@ fn file_type(file: &File) -> Option<&str> {
     file.path
         .as_ref()
         .and_then(|parts| parts.last())
-        .and_then(|base| base_file_type(base))
+        .and_then(base_file_type)
 }
 
 fn file_types(info_files: &InfoFiles) -> Vec<&str> {
@@ -246,15 +217,12 @@ fn view_file_types(cx: Scope, file_types: Vec<&str>) -> impl IntoView {
 fn TorrentsList(
     cx: Scope,
     search_value: InfosSearch,
-    info_files: Resource<Option<InfosSearch>, Option<StdResult<InfoFilesCache, CloneableApiError>>>,
+    info_files_cache: ReadSignal<InfoFilesCache>,
 ) -> impl IntoView {
-    let rows = {
-        let cache: InfoFilesCache = info_files
-            .read(cx)
-            .flatten()
-            .and_then(Result::ok)
-            .unwrap_or_default();
+    let rows = move || {
+        let cache = info_files_cache.get();
         search_value
+            .clone()
             .items
             .into_iter()
             .map(|torrent| {

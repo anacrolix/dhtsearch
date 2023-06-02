@@ -44,7 +44,7 @@ impl<'de> Deserialize<'de> for InfoName {
         let v: String = Deserialize::deserialize(deserializer)?;
         Ok(InfoName(
             ::base64::engine::general_purpose::STANDARD
-                .decode(&v)
+                .decode(v)
                 .map_err(|err| D::Error::custom(err.to_string()))?,
         ))
     }
