@@ -155,10 +155,10 @@ fn TorrentInfo(cx: Scope) -> impl IntoView {
         None => Ok(view! { cx, <p>"Loading..."</p> }.into_view(cx)),
         Some(None) => Err(Arc::new(Error::Anyhow(anyhow!("missing ih param")))),
         Some(Some(Ok(info_files))) => Ok(view! { cx,
-            <a href=make_magnet_link(&info_files.info.info_hash)>"magnet link"</a>
-            <pre>{format!("{:#?}", info_files.info)}</pre>
-            <TorrentFiles files=info_files.files/>
-        }
+                <a href=make_magnet_link(&info_files.info.info_hash)>"magnet link"</a>
+                <pre>{format!("{:#?}", info_files.info)}</pre>
+                <TorrentFiles files=info_files.files/>
+            }
         .into_view(cx)),
         Some(Some(Err(err))) => Err(err),
     }
@@ -166,9 +166,8 @@ fn TorrentInfo(cx: Scope) -> impl IntoView {
 
 #[derive(Eq, PartialEq, Hash, Ord, PartialOrd)]
 struct FileRow {
-    indent: usize,
+    path: Vec<String>,
     dir: bool,
-    name: String,
     // Later I will show the total size of a directory.
     size: Option<i64>,
 }
@@ -177,17 +176,7 @@ fn file_rows(files: Vec<File>) -> Vec<FileRow> {
     files
         .into_iter()
         .map(|file| FileRow {
-            indent: file
-                .path
-                .as_ref()
-                .map(|parts| parts.len())
-                .unwrap_or_default(),
-            name: file
-                .path
-                .unwrap_or_default()
-                .last()
-                .cloned()
-                .unwrap_or_default(),
+            path: file.path.unwrap_or_default(),
             dir: false,
             size: Some(file.length),
         })
@@ -202,13 +191,12 @@ fn dir_file_rows(files: Vec<File>) -> Vec<FileRow> {
                 None => return None,
                 Some(parts) => parts,
             };
-            let dirs = &parts[0..parts.len()-1];
+            let dirs = &parts[0..parts.len() - 1];
             if dirs.is_empty() {
                 return None;
             }
             Some(FileRow {
-                indent: dirs.len(),
-                name: dirs.last().unwrap().clone(),
+                path: dirs.into(),
                 dir: true,
                 size: None,
             })
@@ -224,8 +212,11 @@ fn TorrentFiles(cx: Scope, files: Vec<File>) -> impl IntoView {
     rows.extend(file_rows(files));
     rows.sort();
     rows.into_iter().map(|row| view! { cx,
-        <tr><td>{row.name}</td><td>{row.size}</td></tr>
-    }).collect_view(cx)
+            <tr>
+                <td style:padding-left=format!("{}em", row.path.len())>{row.path.last()}</td>
+                <td>{row.size}</td>
+            </tr>
+        }).collect_view(cx)
 }
 
 #[component]
