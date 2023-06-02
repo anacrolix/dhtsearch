@@ -3,8 +3,11 @@ use crate::api::*;
 use ::leptos::*;
 use anyhow::anyhow;
 use humansize::{format_size, DECIMAL};
+use icu_collator::CollatorOptions;
+use icu_collator::Numeric::On;
 use leptos_router::*;
 use log::info;
+use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::ffi::OsStr;
 use std::path::Path;
@@ -156,30 +159,68 @@ fn TorrentInfo(
     info_files_cache: ReadSignal<InfoFilesCache>,
     info_hash: Signal<Option<String>>,
 ) -> impl IntoView {
-    move || info_hash.with(|info_hash| {
-        info!("torrent info with {:?}", info_hash);
-        info_hash
-            .as_ref()
-            .map(|info_hash| match info_files_cache().get(info_hash) {
-                None => Ok(view! { cx, <p>"Loading..."</p> }.into_view(cx)),
-                Some(None) => Err(anyhow!("missing ih param").into()),
-                Some(Some(Ok(info_files))) => Ok(view! { cx,
-                    <a href=make_magnet_link(&info_files.info.info_hash)>"magnet link"</a>
-                    <pre>{format!("{:#?}", info_files.info)}</pre>
-                    <TorrentFiles files=info_files.files.clone()/>
-                }
-                .into_view(cx)),
-                Some(Some(Err(err))) => Err(err.clone()),
-            })
-    })
+    move || {
+        info_hash.with(|info_hash| {
+            info!("torrent info with {:?}", info_hash);
+            info_hash
+                .as_ref()
+                .map(|info_hash| match info_files_cache().get(info_hash) {
+                    None => Ok(view! { cx, <p>"Loading..."</p> }.into_view(cx)),
+                    Some(None) => Err(anyhow!("missing ih param").into()),
+                    Some(Some(Ok(info_files))) => Ok(view! { cx,
+                        <a href=make_magnet_link(&info_files.info.info_hash)>"magnet link"</a>
+                        <pre>{format!("{:#?}", info_files.info)}</pre>
+                        <TorrentFiles files=info_files.files.clone()/>
+                    }
+                    .into_view(cx)),
+                    Some(Some(Err(err))) => Err(err.clone()),
+                })
+        })
+    }
 }
 
-#[derive(Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[derive(Eq, PartialEq, Hash)]
 struct FileRow {
     path: Vec<String>,
     dir: bool,
     // Later I will show the total size of a directory.
     size: Option<i64>,
+}
+
+impl PartialOrd<Self> for FileRow {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for FileRow {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let mut options = CollatorOptions::new();
+        options.numeric = Some(On);
+        let collator = icu_collator::Collator::try_new_unstable(
+            &icu_testdata::unstable(),
+            &Default::default(),
+            options,
+        )
+        .unwrap();
+        let left = &self.path;
+        let right = &other.path;
+        let l = std::cmp::min(left.len(), right.len());
+
+        // Slice to the loop iteration range to enable bound check
+        // elimination in the compiler
+        let lhs = &left[..l];
+        let rhs = &right[..l];
+
+        for i in 0..l {
+            match collator.compare(&lhs[i], &rhs[i]) {
+                Ordering::Equal => (),
+                non_eq => return non_eq,
+            }
+        }
+
+        left.len().cmp(&right.len())
+    }
 }
 
 fn file_rows(files: Vec<File>) -> Vec<FileRow> {
