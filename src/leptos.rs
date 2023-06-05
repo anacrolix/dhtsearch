@@ -170,7 +170,7 @@ fn TorrentInfo(
                     Some(Some(Ok(info_files))) => Ok(view! { cx,
                         <a href=make_magnet_link(&info_files.info.info_hash)>"magnet link"</a>
                         <pre>{format!("{:#?}", info_files.info)}</pre>
-                        <TorrentFiles files=info_files.files.clone()/>
+                        <TorrentFiles info_files/>
                     }
                     .into_view(cx)),
                     Some(Some(Err(err))) => Err(err.clone()),
@@ -191,7 +191,7 @@ where
     size: Option<i64>,
 }
 
-impl<'a, 'b, P, Q> PartialEq<FileRow<'b, Q>> for FileRow<'b, P>
+impl<'b, P, Q> PartialEq<FileRow<'b, Q>> for FileRow<'b, P>
 where
     P: Eq + AsRef<str> + PartialEq<Q>,
     Q: Eq + AsRef<str>,
@@ -253,12 +253,12 @@ where
     }
 }
 
-fn file_rows(files: &Vec<File>) -> Vec<FileRow<String>> {
+fn file_rows(files: &[File]) -> Vec<FileRow<String>> {
     files
-        .into_iter()
+        .iter()
         .map(|file| FileRow::<String> {
             leaf: file.path.as_ref().unwrap().last().unwrap(),
-            path: &file.path.as_ref().unwrap(),
+            path: file.path.as_ref().unwrap(),
             dir: false,
             size: Some(file.length),
         })
@@ -270,7 +270,7 @@ fn file_dir_file_rows(file: &File) -> impl IntoIterator<Item = FileRow<String>> 
         .iter()
         .filter(|path| path.len() >= 2)
         .flat_map(|parts| {
-            (0..parts.len() - 1).into_iter().map(|leaf| FileRow {
+            (0..parts.len() - 1).map(|leaf| FileRow {
                 leaf: &parts[leaf],
                 path: &parts[0..leaf],
                 dir: true,
@@ -279,10 +279,10 @@ fn file_dir_file_rows(file: &File) -> impl IntoIterator<Item = FileRow<String>> 
         })
 }
 
-fn dir_file_rows(files: &Vec<File>) -> Vec<FileRow<String>> {
+fn dir_file_rows(files: &[File]) -> Vec<FileRow<String>> {
     let mut ret: Vec<_> = files
-        .into_iter()
-        .flat_map(|file| file_dir_file_rows(file))
+        .iter()
+        .flat_map(file_dir_file_rows)
         .collect::<HashSet<_>>()
         .into_iter()
         .collect();
@@ -290,12 +290,16 @@ fn dir_file_rows(files: &Vec<File>) -> Vec<FileRow<String>> {
     ret
 }
 
-#[component]
-fn TorrentFiles(cx: Scope, files: Vec<File>) -> impl IntoView {
-    let mut rows = dir_file_rows(&files);
-    rows.extend(file_rows(&files));
+fn info_files_to_file_rows(info_files: &InfoFiles) -> Vec<FileRow<String>> {
+    let mut rows = dir_file_rows(&info_files.files);
+    rows.extend(file_rows(&info_files.files));
     rows.sort();
-    rows.into_iter()
+    rows
+}
+
+#[component]
+fn TorrentFiles<'a>(cx: Scope, info_files: &'a InfoFiles) -> impl IntoView {
+    info_files_to_file_rows(info_files).into_iter()
         .map(|row| {
             let leaf = row.leaf.to_owned();
             view! { cx,
@@ -466,5 +470,10 @@ mod tests {
                 dir_file_row(&"c", &["a", "b"]),
             ],
         );
+    }
+
+    #[test]
+    fn test_single_file_torrent_file_rows() {
+
     }
 }
