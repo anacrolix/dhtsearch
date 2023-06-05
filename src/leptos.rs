@@ -168,10 +168,10 @@ fn TorrentInfo(
                     None => Ok(view! { cx, <p>"Loading..."</p> }.into_view(cx)),
                     Some(None) => Err(anyhow!("missing ih param").into()),
                     Some(Some(Ok(info_files))) => Ok(view! { cx,
-                            <a href=make_magnet_link(&info_files.info.info_hash)>"magnet link"</a>
-                            <pre>{format!("{:#?}", info_files.info)}</pre>
-                            <TorrentFiles files=info_files.files.clone()/>
-                        }
+                        <a href=make_magnet_link(&info_files.info.info_hash)>"magnet link"</a>
+                        <pre>{format!("{:#?}", info_files.info)}</pre>
+                        <TorrentFiles files=info_files.files.clone()/>
+                    }
                     .into_view(cx)),
                     Some(Some(Err(err))) => Err(err.clone()),
                 })
@@ -179,21 +179,41 @@ fn TorrentInfo(
     }
 }
 
-#[derive(Eq, PartialEq, Hash, Debug)]
-struct FileRow {
-    path: Vec<String>,
+#[derive(Eq, Hash, Debug)]
+struct FileRow<'a, P>
+where
+    P: AsRef<str> + Eq,
+{
+    leaf: &'a str,
+    path: &'a [P],
     dir: bool,
     // Later I will show the total size of a directory.
     size: Option<i64>,
 }
 
-impl PartialOrd<Self> for FileRow {
+impl<'a, 'b, P, Q> PartialEq<FileRow<'b, Q>> for FileRow<'b, P>
+where
+    P: Eq + AsRef<str> + PartialEq<Q>,
+    Q: Eq + AsRef<str>,
+{
+    fn eq(&self, other: &FileRow<'b, Q>) -> bool {
+        self.leaf == other.leaf && self.path == other.path
+    }
+}
+
+impl<'a, P> PartialOrd<Self> for FileRow<'a, P>
+where
+    P: Eq + AsRef<str>,
+{
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Ord for FileRow {
+impl<'a, P> Ord for FileRow<'a, P>
+where
+    P: AsRef<str> + PartialEq + Eq,
+{
     fn cmp(&self, other: &Self) -> Ordering {
         let mut options = CollatorOptions::new();
         options.numeric = Some(On);
@@ -213,38 +233,56 @@ impl Ord for FileRow {
         let rhs = &right[..l];
 
         for i in 0..l {
-            match collator.compare(&lhs[i], &rhs[i]) {
+            match collator.compare(lhs[i].as_ref(), rhs[i].as_ref()) {
                 Ordering::Equal => (),
                 non_eq => return non_eq,
             }
         }
 
-        left.len().cmp(&right.len())
+        match self.leaf.cmp(other.leaf) {
+            Ordering::Equal => (),
+            non_eq => return non_eq,
+        };
+
+        match left.len().cmp(&right.len()) {
+            Ordering::Equal => (),
+            non_eq => return non_eq,
+        };
+
+        Ordering::Equal
     }
 }
 
-fn file_rows(files: Vec<File>) -> Vec<FileRow> {
+fn file_rows(files: &Vec<File>) -> Vec<FileRow<String>> {
     files
         .into_iter()
-        .map(|file| FileRow {
-            path: file.path.unwrap_or_default(),
+        .map(|file| FileRow::<String> {
+            leaf: file.path.as_ref().unwrap().last().unwrap(),
+            path: &file.path.as_ref().unwrap(),
             dir: false,
             size: Some(file.length),
         })
         .collect()
 }
 
-fn dir_file_rows(files: Vec<File>) -> Vec<FileRow> {
-    let mut ret: Vec<_> = files
-        .into_iter()
-        .flat_map(|file| {
-            let path = file.path.unwrap_or_default();
-            (1..path.len()).map(move |end| FileRow {
-                path: path[0..end].to_owned(),
+fn file_dir_file_rows(file: &File) -> impl IntoIterator<Item = FileRow<String>> {
+    file.path
+        .iter()
+        .filter(|path| path.len() >= 2)
+        .flat_map(|parts| {
+            (0..parts.len() - 1).into_iter().map(|leaf| FileRow {
+                leaf: &parts[leaf],
+                path: &parts[0..leaf],
                 dir: true,
                 size: None,
             })
         })
+}
+
+fn dir_file_rows(files: &Vec<File>) -> Vec<FileRow<String>> {
+    let mut ret: Vec<_> = files
+        .into_iter()
+        .flat_map(|file| file_dir_file_rows(file))
         .collect::<HashSet<_>>()
         .into_iter()
         .collect();
@@ -254,14 +292,15 @@ fn dir_file_rows(files: Vec<File>) -> Vec<FileRow> {
 
 #[component]
 fn TorrentFiles(cx: Scope, files: Vec<File>) -> impl IntoView {
-    let mut rows = dir_file_rows(files.clone());
-    rows.extend(file_rows(files));
+    let mut rows = dir_file_rows(&files);
+    rows.extend(file_rows(&files));
     rows.sort();
     rows.into_iter()
         .map(|row| {
+            let leaf = row.leaf.to_owned();
             view! { cx,
                 <tr>
-                    <td style:padding-left=format!("{}em", row.path.len())>{row.path.last()}</td>
+                    <td style:padding-left=format!("{}em", row.path.len())>{leaf}</td>
                     <td>{row.size.map(|size| format_size(size as u64, DECIMAL))}</td>
                 </tr>
             }
@@ -391,35 +430,41 @@ pub fn mount_to_body() {
 mod tests {
     use super::*;
 
-    fn vec_strings(input: &[&str]) -> Vec<String> {
-        input.into_iter().map(|x| x.to_string()).collect()
-    }
-
-    fn dir_file_row(input: &[&str]) -> FileRow {
+    fn dir_file_row<'a>(leaf: &'a str, path: &'a [&'a str]) -> FileRow<'a, &'a str> {
         FileRow {
-            path: vec_strings(input),
+            leaf,
+            path,
             dir: true,
             size: None,
         }
     }
 
+    fn same_contents<T: Debug + PartialEq<U> + Ord, U: Debug + Ord>(
+        mut got: Vec<T>,
+        mut expected: Vec<U>,
+    ) {
+        got.sort();
+        expected.sort();
+        assert_eq!(got, expected);
+    }
+
     #[test]
     fn test_dir_file_rows() {
-        assert_eq!(
-            dir_file_rows(vec![File {
+        same_contents(
+            dir_file_rows(&vec![File {
                 path: Some(
                     vec!["a", "b", "c", "d"]
                         .into_iter()
                         .map(ToOwned::to_owned)
-                        .collect()
+                        .collect(),
                 ),
                 length: 42,
             }]),
             vec![
-                dir_file_row(&["a"]),
-                dir_file_row(&["a", "b"]),
-                dir_file_row(&["a", "b", "c"]),
-            ]
+                dir_file_row(&"a", &[]),
+                dir_file_row(&"b", &["a"]),
+                dir_file_row(&"c", &["a", "b"]),
+            ],
         );
     }
 }
