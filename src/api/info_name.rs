@@ -49,3 +49,9 @@ impl<'de> Deserialize<'de> for InfoName {
         ))
     }
 }
+
+impl From<String> for InfoName {
+    fn from(value: String) -> Self {
+        Self(value.into_bytes())
+    }
+}

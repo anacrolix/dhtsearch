@@ -44,6 +44,26 @@ pub struct InfoFiles {
     pub files: Vec<File>,
 }
 
+pub struct UpvertedFile {
+    pub path: Vec<String>,
+    pub length: FileLength,
+}
+
+impl InfoFiles {
+    pub fn upverted_files(&self) -> Vec<UpvertedFile> {
+        self.files
+            .iter()
+            .map(|file| UpvertedFile {
+                path: file
+                    .path
+                    .clone()
+                    .unwrap_or_else(|| vec![self.info.name.to_string()]),
+                length: file.length,
+            })
+            .collect()
+    }
+}
+
 type InfoFilesPayload = Vec<InfoFiles>;
 
 #[derive(Clone, PartialEq, Deserialize, Default, Debug)]
@@ -60,13 +80,15 @@ pub struct Info {
     pub scrape_time: String,
 }
 
+pub type FileLength = i64;
+
 #[derive(Clone, PartialEq, Deserialize, Default, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct File {
     // This might be optional (for null), and might be sent as byte array that needs manual
     // splitting.
     pub path: Option<Vec<String>>,
-    pub length: i64,
+    pub length: FileLength,
 }
 
 const DHT_INDEXER_URL: &str = if false {

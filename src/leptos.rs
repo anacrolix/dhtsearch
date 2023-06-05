@@ -253,33 +253,32 @@ where
     }
 }
 
-fn file_rows(files: &[File]) -> Vec<FileRow<String>> {
+fn file_rows(files: &[UpvertedFile]) -> Vec<FileRow<String>> {
     files
         .iter()
-        .map(|file| FileRow::<String> {
-            leaf: file.path.as_ref().unwrap().last().unwrap(),
-            path: file.path.as_ref().unwrap(),
-            dir: false,
-            size: Some(file.length),
+        .map(|file| {
+            let (leaf, path) = file.path.split_last().unwrap();
+            FileRow::<String> {
+                leaf,
+                path,
+                dir: false,
+                size: Some(file.length),
+            }
         })
         .collect()
 }
 
-fn file_dir_file_rows(file: &File) -> impl IntoIterator<Item = FileRow<String>> {
-    file.path
-        .iter()
-        .filter(|path| path.len() >= 2)
-        .flat_map(|parts| {
-            (0..parts.len() - 1).map(|leaf| FileRow {
-                leaf: &parts[leaf],
-                path: &parts[0..leaf],
-                dir: true,
-                size: None,
-            })
-        })
+fn file_dir_file_rows(file: &UpvertedFile) -> impl IntoIterator<Item = FileRow<String>> {
+    let parts = &file.path;
+    (0..parts.len() - 1).map(|leaf| FileRow {
+        leaf: &parts[leaf],
+        path: &parts[0..leaf],
+        dir: true,
+        size: None,
+    })
 }
 
-fn dir_file_rows(files: &[File]) -> Vec<FileRow<String>> {
+fn dir_file_rows(files: &[UpvertedFile]) -> Vec<FileRow<String>> {
     let mut ret: Vec<_> = files
         .iter()
         .flat_map(file_dir_file_rows)
@@ -290,16 +289,17 @@ fn dir_file_rows(files: &[File]) -> Vec<FileRow<String>> {
     ret
 }
 
-fn info_files_to_file_rows(info_files: &InfoFiles) -> Vec<FileRow<String>> {
-    let mut rows = dir_file_rows(&info_files.files);
-    rows.extend(file_rows(&info_files.files));
+fn info_files_to_file_rows(upverted: &[UpvertedFile]) -> Vec<FileRow<String>> {
+    let mut rows = dir_file_rows(upverted);
+    rows.extend(file_rows(&upverted));
     rows.sort();
     rows
 }
 
 #[component]
 fn TorrentFiles<'a>(cx: Scope, info_files: &'a InfoFiles) -> impl IntoView {
-    info_files_to_file_rows(info_files).into_iter()
+    info_files_to_file_rows(&info_files.upverted_files())
+        .into_iter()
         .map(|row| {
             let leaf = row.leaf.to_owned();
             view! { cx,
@@ -454,8 +454,12 @@ mod tests {
 
     #[test]
     fn test_dir_file_rows() {
-        same_contents(
-            dir_file_rows(&vec![File {
+        let upverted = InfoFiles {
+            info: Info {
+                name: "a".to_owned().into(),
+                ..Default::default()
+            },
+            files: vec![File {
                 path: Some(
                     vec!["a", "b", "c", "d"]
                         .into_iter()
@@ -463,7 +467,11 @@ mod tests {
                         .collect(),
                 ),
                 length: 42,
-            }]),
+            }],
+        }
+        .upverted_files();
+        same_contents(
+            dir_file_rows(&upverted),
             vec![
                 dir_file_row(&"a", &[]),
                 dir_file_row(&"b", &["a"]),
@@ -474,6 +482,26 @@ mod tests {
 
     #[test]
     fn test_single_file_torrent_file_rows() {
-
+        assert_eq!(
+            info_files_to_file_rows(
+                &InfoFiles {
+                    info: Info {
+                        name: "a".to_owned().into(),
+                        ..Default::default()
+                    },
+                    files: vec![File {
+                        path: None,
+                        ..Default::default()
+                    }]
+                }
+                .upverted_files()
+            ),
+            vec![FileRow::<String> {
+                leaf: &"a",
+                path: &[],
+                dir: false,
+                size: Some(0),
+            }]
+        )
     }
 }
