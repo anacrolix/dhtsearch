@@ -168,10 +168,10 @@ fn TorrentInfo(
                     None => Ok(view! { cx, <p>"Loading..."</p> }.into_view(cx)),
                     Some(None) => Err(anyhow!("missing ih param").into()),
                     Some(Some(Ok(info_files))) => Ok(view! { cx,
-                        <a href=make_magnet_link(&info_files.info.info_hash)>"magnet link"</a>
-                        <pre>{format!("{:#?}", info_files.info)}</pre>
-                        <TorrentFiles info_files/>
-                    }
+                            <a href=make_magnet_link(&info_files.info.info_hash)>"magnet link"</a>
+                            <pre>{format!("{:#?}", info_files.info)}</pre>
+                            <TorrentFiles info_files/>
+                        }
                     .into_view(cx)),
                     Some(Some(Err(err))) => Err(err.clone()),
                 })
@@ -296,7 +296,17 @@ fn TorrentFiles<'a>(cx: Scope, info_files: &'a InfoFiles) -> impl IntoView {
             let leaf = row.leaf.to_owned();
             view! { cx,
                 <tr>
-                    <td style:padding-left=format!("{}em", row.path.len())>{leaf}</td>
+                    <td style:padding-left=format!("{}em", row.path.len())>
+                        <input type="checkbox" disabled/>
+                        <i
+                            style:width="1em"
+                            style:padding-right="0.5em"
+                            class="fa-regular"
+                            class:fa-file=move || !row.dir
+                            class:fa-folder=move || row.dir
+                        ></i>
+                        {leaf}
+                    </td>
                     <td>{row.size.map(|size| format_size(size as u64, DECIMAL))}</td>
                 </tr>
             }
