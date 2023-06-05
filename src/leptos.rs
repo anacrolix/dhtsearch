@@ -3,8 +3,8 @@ use crate::api::*;
 use ::leptos::*;
 use anyhow::anyhow;
 use humansize::{format_size, DECIMAL};
-use icu_collator::CollatorOptions;
 use icu_collator::Numeric::On;
+use icu_collator::{Collator, CollatorOptions};
 use leptos_router::*;
 use log::info;
 use std::cmp::Ordering;
@@ -191,6 +191,29 @@ where
     size: Option<i64>,
 }
 
+impl<'a, P> FileRow<'a, P>
+where
+    P: AsRef<str> + Eq,
+{
+    fn get_collator() -> Collator {
+        let mut options = CollatorOptions::new();
+        options.numeric = Some(On);
+        icu_collator::Collator::try_new_unstable(
+            &icu_testdata::unstable(),
+            &Default::default(),
+            options,
+        )
+        .unwrap()
+    }
+
+    fn iter_path(&self) -> impl Iterator<Item = &str> {
+        self.path
+            .iter()
+            .map(|x| x.as_ref())
+            .chain(std::iter::once(self.leaf))
+    }
+}
+
 impl<'b, P, Q> PartialEq<FileRow<'b, Q>> for FileRow<'b, P>
 where
     P: Eq + AsRef<str> + PartialEq<Q>,
@@ -215,41 +238,10 @@ where
     P: AsRef<str> + PartialEq + Eq,
 {
     fn cmp(&self, other: &Self) -> Ordering {
-        let mut options = CollatorOptions::new();
-        options.numeric = Some(On);
-        let collator = icu_collator::Collator::try_new_unstable(
-            &icu_testdata::unstable(),
-            &Default::default(),
-            options,
-        )
-        .unwrap();
-        let left = &self.path;
-        let right = &other.path;
-        let l = std::cmp::min(left.len(), right.len());
-
-        // Slice to the loop iteration range to enable bound check
-        // elimination in the compiler
-        let lhs = &left[..l];
-        let rhs = &right[..l];
-
-        for i in 0..l {
-            match collator.compare(lhs[i].as_ref(), rhs[i].as_ref()) {
-                Ordering::Equal => (),
-                non_eq => return non_eq,
-            }
-        }
-
-        match self.leaf.cmp(other.leaf) {
-            Ordering::Equal => (),
-            non_eq => return non_eq,
-        };
-
-        match left.len().cmp(&right.len()) {
-            Ordering::Equal => (),
-            non_eq => return non_eq,
-        };
-
-        Ordering::Equal
+        let collator = Self::get_collator();
+        self.iter_path().cmp_by(other.iter_path(), |left, right| {
+            collator.compare(left, right)
+        })
     }
 }
 

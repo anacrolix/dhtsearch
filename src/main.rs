@@ -1,3 +1,5 @@
+#![feature(iter_order_by)]
+
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::Deref;
 use std::sync::Arc;
