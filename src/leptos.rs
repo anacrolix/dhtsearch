@@ -26,9 +26,13 @@ fn list_errors(cx: Scope, errors: RwSignal<Errors>) -> impl IntoView {
 #[component]
 fn App(cx: Scope) -> impl IntoView {
     view! { cx,
-        <Router>
-            <InsideRouter/>
-        </Router>
+        <div class="body">
+            <div class="content">
+                <Router>
+                    <InsideRouter/>
+                </Router>
+            </div>
+        </div>
     }
 }
 
@@ -109,7 +113,9 @@ fn InsideRouter(cx: Scope) -> impl IntoView {
     });
     view! { cx,
         <h1>{"DHT search"}</h1>
-        <SearchForm/>
+        <div class="search-form">
+            <SearchForm/>
+        </div>
         <ErrorBoundary fallback=|cx, errors| {
             view! { cx, <ul>{list_errors(cx, errors)}</ul> }
         }>
@@ -147,8 +153,11 @@ fn InsideRouter(cx: Scope) -> impl IntoView {
 fn SearchForm(cx: Scope) -> impl IntoView {
     let search_query = move || use_query_map(cx)().get("s").cloned().unwrap_or_default();
     view! { cx,
-        <Form method="GET" action="">
-            <input type="search" name="s" prop:value=search_query/>
+        <Form method="GET" action="" class="search-form">
+            <input style="width: 100%" type="search" name="s" prop:value=search_query/>
+            <button>
+                <i class="fa fa-search"></i>
+            </button>
         </Form>
     }
 }
