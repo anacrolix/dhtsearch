@@ -141,12 +141,15 @@ impl FileView {
                 .collect();
             let collator = new_collator();
             children.sort_by(|left, right| {
-                collator.compare(&left.name, &right.name).then(
-                    left.children
-                        .is_empty()
-                        .cmp(&right.children.is_empty())
-                        .reverse(),
-                ).then(left.size.cmp(&right.size).reverse())
+                collator
+                    .compare(&left.name, &right.name)
+                    .then(
+                        left.children
+                            .is_empty()
+                            .cmp(&right.children.is_empty())
+                            .reverse(),
+                    )
+                    .then(left.size.cmp(&right.size).reverse())
             });
             children
         } else {
@@ -159,5 +162,19 @@ impl FileView {
                 + children.iter().map(|file_view| file_view.size).sum::<u64>(),
             children,
         }
+    }
+}
+
+impl IntoView for FileView {
+    fn into_view(self, cx: Scope) -> View {
+        let child_rows = self.children.collect_view(cx);
+        let child_table = view! { cx, <table>{child_rows}</table> };
+        view! { cx,
+            <tr>
+                <td>{self.name}<br/>{child_table}</td>
+                <td>{self.size}</td>
+            </tr>
+        }
+        .into_view(cx)
     }
 }

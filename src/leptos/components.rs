@@ -175,10 +175,22 @@ fn TorrentInfo(cx: Scope, info: Info, file_rows: Vec<FileRow>) -> impl IntoView 
             </a>
         </p>
         <pre>{format!("{:#?}", info)}</pre>
+        <TorrentFilesNested file_rows=&file_rows/>
         <TorrentFiles file_rows/>
     }
 }
 
+#[component]
+fn TorrentFilesNested<'a>(cx: Scope, file_rows: &'a Vec<FileRow>) -> impl IntoView {
+    let root_file_view = FileView::from_file_rows(file_rows);
+    let num_files = file_rows.len();
+    view! { cx,
+        <table>
+            <caption>{num_files} " files"</caption>
+            {root_file_view}
+        </table>
+    }
+}
 #[component]
 fn TorrentFiles(cx: Scope, file_rows: Vec<FileRow>) -> impl IntoView {
     let rows = file_rows
