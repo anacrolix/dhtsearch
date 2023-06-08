@@ -188,7 +188,7 @@ fn TorrentInfo(
     }
 }
 
-#[derive(Eq, Hash, Debug)]
+#[derive(Eq, Hash, Debug, Ord, PartialOrd)]
 struct FileRow<'a, P>
 where
     P: AsRef<str> + Eq,
@@ -200,26 +200,32 @@ where
     size: Option<i64>,
 }
 
+fn new_collator() -> Collator {
+    let mut options = CollatorOptions::new();
+    options.numeric = Some(On);
+    icu_collator::Collator::try_new_unstable(
+        &icu_testdata::unstable(),
+        &Default::default(),
+        options,
+    )
+    .unwrap()
+}
+
 impl<'a, P> FileRow<'a, P>
 where
     P: AsRef<str> + Eq,
 {
-    fn get_collator() -> Collator {
-        let mut options = CollatorOptions::new();
-        options.numeric = Some(On);
-        icu_collator::Collator::try_new_unstable(
-            &icu_testdata::unstable(),
-            &Default::default(),
-            options,
-        )
-        .unwrap()
-    }
-
     fn iter_path(&self) -> impl Iterator<Item = &str> {
         self.path
             .iter()
             .map(|x| x.as_ref())
             .chain(std::iter::once(self.leaf))
+    }
+
+    fn compare_with_collator(&self, other: &Self, collator: &Collator) -> Ordering {
+        self.iter_path().cmp_by(other.iter_path(), |left, right| {
+            collator.compare(left, right)
+        })
     }
 }
 
@@ -230,27 +236,6 @@ where
 {
     fn eq(&self, other: &FileRow<'b, Q>) -> bool {
         self.leaf == other.leaf && self.path == other.path
-    }
-}
-
-impl<'a, P> PartialOrd<Self> for FileRow<'a, P>
-where
-    P: Eq + AsRef<str>,
-{
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl<'a, P> Ord for FileRow<'a, P>
-where
-    P: AsRef<str> + PartialEq + Eq,
-{
-    fn cmp(&self, other: &Self) -> Ordering {
-        let collator = Self::get_collator();
-        self.iter_path().cmp_by(other.iter_path(), |left, right| {
-            collator.compare(left, right)
-        })
     }
 }
 
@@ -280,20 +265,19 @@ fn file_dir_file_rows(file: &UpvertedFile) -> impl IntoIterator<Item = FileRow<S
 }
 
 fn dir_file_rows(files: &[UpvertedFile]) -> Vec<FileRow<String>> {
-    let mut ret: Vec<_> = files
+    files
         .iter()
         .flat_map(file_dir_file_rows)
         .collect::<HashSet<_>>()
         .into_iter()
-        .collect();
-    ret.sort();
-    ret
+        .collect()
 }
 
 fn info_files_to_file_rows(upverted: &[UpvertedFile]) -> Vec<FileRow<String>> {
     let mut rows = dir_file_rows(upverted);
     rows.extend(file_rows(&upverted));
-    rows.sort();
+    let collator = new_collator();
+    rows.sort_by(|left, right| left.compare_with_collator(right, &collator));
     rows
 }
 
