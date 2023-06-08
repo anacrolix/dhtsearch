@@ -1,10 +1,14 @@
 #![feature(iter_order_by)]
 
+use icu_collator::Numeric::On;
+use icu_collator::{Collator, CollatorOptions};
+use log::info;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::Deref;
 use std::sync::Arc;
 
 mod api;
+mod filerow;
 #[cfg(feature = "leptos")]
 mod leptos;
 #[cfg(feature = "yew")]
@@ -65,3 +69,14 @@ impl Display for CloneableError {
 }
 
 impl std::error::Error for CloneableError {}
+
+pub(crate) fn new_collator() -> Collator {
+    let mut options = CollatorOptions::new();
+    options.numeric = Some(On);
+    icu_collator::Collator::try_new_unstable(
+        &icu_testdata::unstable(),
+        &Default::default(),
+        options,
+    )
+    .unwrap()
+}
