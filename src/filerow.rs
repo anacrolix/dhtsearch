@@ -5,7 +5,6 @@ use std::collections::HashSet;
 
 #[derive(Eq, Hash, Debug, Ord, PartialOrd, Clone)]
 pub struct FileRow {
-    pub leaf: String,
     pub path: Vec<String>,
     pub dir: bool,
     // Later I will show the total size of a directory.
@@ -14,11 +13,12 @@ pub struct FileRow {
 }
 
 impl FileRow {
+    pub fn leaf(&self) -> Option<&String> {
+        self.path.last()
+    }
+
     pub fn iter_path(&self) -> impl Iterator<Item = &str> {
-        self.path
-            .iter()
-            .map(|x| x.as_str())
-            .chain(std::iter::once(self.leaf.as_str()))
+        self.path.iter().map(|x| x.as_str())
     }
 
     fn compare_with_collator(&self, other: &Self, collator: &Collator) -> Ordering {
@@ -30,7 +30,7 @@ impl FileRow {
 
 impl PartialEq for FileRow {
     fn eq(&self, other: &FileRow) -> bool {
-        self.leaf == other.leaf && self.path == other.path
+        self.path == other.path
     }
 }
 
@@ -38,25 +38,18 @@ fn file_rows(files: &[UpvertedFile]) -> Vec<FileRow> {
     files
         .iter()
         .enumerate()
-        .map(|(so, file)| {
-            let (leaf, path) = file.path.split_last().unwrap();
-            let leaf = leaf.clone();
-            let path = path.to_vec();
-            FileRow {
-                leaf,
-                path,
-                dir: false,
-                size: Some(file.length),
-                so: Some(so),
-            }
+        .map(|(so, file)| FileRow {
+            path: file.path.clone(),
+            dir: false,
+            size: Some(file.length),
+            so: Some(so),
         })
         .collect()
 }
 
 fn file_dir_file_rows(file: &UpvertedFile) -> impl IntoIterator<Item = FileRow> + '_ {
     let parts = &file.path;
-    (0..parts.len() - 1).map(|leaf| FileRow {
-        leaf: parts[leaf].clone(),
+    (1..parts.len()).map(|leaf| FileRow {
         path: parts[0..leaf].to_vec(),
         dir: true,
         size: None,
@@ -87,11 +80,16 @@ mod tests {
     use crate::api::*;
     use crate::leptos::FileView;
     use pretty_assertions::assert_eq;
+    use std::iter::once;
 
     fn dir_file_row<'a>(leaf: &'a str, path: &'a [&'a str]) -> FileRow {
         FileRow {
-            leaf: leaf.to_string(),
-            path: path.iter().map(|s| s.to_string()).collect(),
+            path: path
+                .iter()
+                .cloned()
+                .chain(once(leaf))
+                .map(|s| s.to_string())
+                .collect(),
             dir: true,
             size: None,
             so: None,
@@ -157,29 +155,34 @@ mod tests {
                 dir_file_row(&"b", &["a"]),
                 dir_file_row(&"c", &["a", "b"]),
                 FileRow {
-                    leaf: "10".into(),
-                    path: ["a", "b", "c"].into_iter().map(ToOwned::to_owned).collect(),
+                    path: ["a", "b", "c", "10"]
+                        .into_iter()
+                        .map(ToOwned::to_owned)
+                        .collect(),
                     dir: false,
                     size: Some(1),
                     so: Some(0),
                 },
                 FileRow {
-                    leaf: "10".into(),
-                    path: ["a", "b", "c"].into_iter().map(ToOwned::to_owned).collect(),
+                    path: ["a", "b", "c", "10"]
+                        .into_iter()
+                        .map(ToOwned::to_owned)
+                        .collect(),
                     dir: false,
                     size: Some(2),
                     so: Some(1),
                 },
                 FileRow {
-                    leaf: "2".into(),
-                    path: ["a", "b", "c"].into_iter().map(ToOwned::to_owned).collect(),
+                    path: ["a", "b", "c", "2"]
+                        .into_iter()
+                        .map(ToOwned::to_owned)
+                        .collect(),
                     dir: false,
                     size: Some(3),
                     so: Some(2),
                 },
                 FileRow {
-                    leaf: "b".into(),
-                    path: ["a"].into_iter().map(ToOwned::to_owned).collect(),
+                    path: ["a", "b"].into_iter().map(ToOwned::to_owned).collect(),
                     dir: false,
                     size: Some(4),
                     so: Some(3),
@@ -190,47 +193,52 @@ mod tests {
         assert_eq!(
             file_view,
             Some(FileView {
-                name: "a".to_string(),
+                name: "".to_string(),
                 size: 10,
                 so: None,
-                children: vec![
-                    FileView {
-                        name: "b".to_string(),
-                        size: 4,
-                        so: Some(3),
-                        children: vec![],
-                    },
-                    FileView {
-                        name: "b".to_string(),
-                        size: 6,
-                        so: None,
-                        children: vec![FileView {
-                            name: "c".to_string(),
+                children: vec![FileView {
+                    name: "a".to_string(),
+                    size: 10,
+                    so: None,
+                    children: vec![
+                        FileView {
+                            name: "b".to_string(),
+                            size: 4,
+                            so: Some(3),
+                            children: vec![],
+                        },
+                        FileView {
+                            name: "b".to_string(),
                             size: 6,
                             so: None,
-                            children: vec![
-                                FileView {
-                                    name: "2".to_string(),
-                                    size: 3,
-                                    so: Some(2),
-                                    children: vec![],
-                                },
-                                FileView {
-                                    name: "10".to_string(),
-                                    size: 2,
-                                    so: Some(1),
-                                    children: vec![],
-                                },
-                                FileView {
-                                    name: "10".to_string(),
-                                    size: 1,
-                                    so: Some(0),
-                                    children: vec![],
-                                }
-                            ],
-                        }],
-                    }
-                ],
+                            children: vec![FileView {
+                                name: "c".to_string(),
+                                size: 6,
+                                so: None,
+                                children: vec![
+                                    FileView {
+                                        name: "2".to_string(),
+                                        size: 3,
+                                        so: Some(2),
+                                        children: vec![],
+                                    },
+                                    FileView {
+                                        name: "10".to_string(),
+                                        size: 2,
+                                        so: Some(1),
+                                        children: vec![],
+                                    },
+                                    FileView {
+                                        name: "10".to_string(),
+                                        size: 1,
+                                        so: Some(0),
+                                        children: vec![],
+                                    }
+                                ],
+                            }],
+                        }
+                    ],
+                },]
             })
         )
     }
@@ -252,8 +260,7 @@ mod tests {
                 .upverted_files()
             ),
             vec![FileRow {
-                leaf: "a".to_string(),
-                path: vec![],
+                path: vec!["a".to_string()],
                 dir: false,
                 size: Some(0),
                 so: Some(0),

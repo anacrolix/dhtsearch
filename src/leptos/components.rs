@@ -197,7 +197,7 @@ fn TorrentFiles(cx: Scope, file_rows: Vec<FileRow>) -> impl IntoView {
         .iter()
         .cloned()
         .map(|row| {
-            let leaf = row.leaf.to_owned();
+            let leaf = row.leaf().to_owned();
             view! { cx,
                 <tr>
                     <td style:padding-left=format!("{}em", row.path.len())>

@@ -119,9 +119,11 @@ impl FileView {
     pub fn from_file_rows<'a>(
         file_rows: impl IntoIterator<Item = &'a FileRow> + Copy,
     ) -> Option<Self> {
-        let this_file_row: &FileRow = match file_rows.into_iter().next() {
-            Some(file_row) => file_row,
-            None => return None,
+        let this_file_row = &FileRow {
+            path: vec![],
+            dir: true,
+            size: None,
+            so: None,
         };
         Some(Self::from_file_rows_inner(this_file_row, file_rows))
     }
@@ -134,8 +136,9 @@ impl FileView {
             let mut children: Vec<FileView> = file_rows
                 .into_iter()
                 .filter(|file_row: &&FileRow| {
-                    file_row.path.len() == target.path.len() + 1
-                        && target.iter_path().eq(file_row.path.iter())
+                    let target_len = target.path.len();
+                    file_row.path.len() == target_len + 1
+                        && target.path.iter().eq(file_row.path.iter().take(target_len))
                 })
                 .map(|file_row| Self::from_file_rows_inner(file_row, file_rows))
                 .collect();
@@ -156,7 +159,7 @@ impl FileView {
             vec![]
         };
         FileView {
-            name: target.leaf.clone(),
+            name: target.leaf().cloned().unwrap_or_default(),
             so: target.so,
             size: target.size.unwrap_or_default() as u64
                 + children.iter().map(|file_view| file_view.size).sum::<u64>(),
@@ -168,12 +171,12 @@ impl FileView {
 impl IntoView for FileView {
     fn into_view(self, cx: Scope) -> View {
         let child_rows = self.children.collect_view(cx);
-        let child_table = view! { cx, <table>{child_rows}</table> };
         view! { cx,
             <tr>
-                <td>{self.name}<br/>{child_table}</td>
+                <td>{self.name}</td>
                 <td>{self.size}</td>
             </tr>
+            {child_rows}
         }
         .into_view(cx)
     }
