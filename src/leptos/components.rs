@@ -115,12 +115,18 @@ fn TorrentInfo(
                 .map(|info_hash| match info_files_cache().get(info_hash) {
                     None => Ok(view! { cx, <p>"Loading..."</p> }.into_view(cx)),
                     Some(None) => Err(anyhow!("missing ih param").into()),
-                    Some(Some(Ok(info_files))) => Ok(view! { cx,
-                            <a href=make_magnet_link(&info_files.info.info_hash)>"magnet link"</a>
+                    Some(Some(Ok(info_files))) => {
+                        let magnet_link = make_magnet_link(&info_files.info.info_hash);
+                        Ok(view! { cx,
+                            <a href=&magnet_link>
+                                <i class="fa fa-magnet"></i>
+                                {magnet_link}
+                            </a>
                             <pre>{format!("{:#?}", info_files.info)}</pre>
                             <TorrentFiles info_files/>
                         }
-                    .into_view(cx)),
+                        .into_view(cx))
+                    }
                     Some(Some(Err(err))) => Err(err.clone()),
                 })
         })
@@ -129,7 +135,7 @@ fn TorrentInfo(
 
 #[component]
 fn TorrentFiles<'a>(cx: Scope, info_files: &'a InfoFiles) -> impl IntoView {
-    info_files_to_file_rows(&info_files.upverted_files())
+    let rows = info_files_to_file_rows(&info_files.upverted_files())
         .into_iter()
         .map(|row| {
             let leaf = row.leaf.to_owned();
@@ -150,7 +156,13 @@ fn TorrentFiles<'a>(cx: Scope, info_files: &'a InfoFiles) -> impl IntoView {
                 </tr>
             }
         })
-        .collect_view(cx)
+        .collect_view(cx);
+    view! { cx,
+        <table>
+            <caption>{info_files.files.len()} " files"</caption>
+            {rows}
+        </table>
+    }
 }
 
 #[component]
@@ -194,9 +206,16 @@ fn TorrentsList(
                     .cloned()
                     .flatten()
                     .and_then(|result| result.ok());
+                let loading = move ||
+                    view! { cx, <i class="fa fa-spinner fa-spin-pulse"></i> }.into_view(cx);
+                let num_files = info_files
+                    .as_ref()
+                    .map(|info_files| info_files.files.len().into_view(cx))
+                    .unwrap_or_else(loading);
                 let file_types = info_files
                     .as_ref()
-                    .map(|info_files| view_file_types(cx, file_types(info_files)));
+                    .map(|info_files| view_file_types(cx, file_types(info_files)).into_view(cx))
+                    .unwrap_or_else(loading);
                 view! { cx,
                     <tr>
                         <td class="name">
@@ -205,7 +224,7 @@ fn TorrentsList(
                         <td>{torrent.swarm_info.seeders}</td>
                         <td>{format_size(torrent.size, DECIMAL)}</td>
                         <td>{torrent.age}</td>
-                        <td>{info_files.as_ref().map(|info_files| info_files.files.len())}</td>
+                        <td>{num_files}</td>
                         <td>{file_types}</td>
                     </tr>
                 }
