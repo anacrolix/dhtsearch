@@ -1,6 +1,9 @@
 serve:
 	trunk serve --open
 
+serve-release:
+	trunk serve --open --release
+
 deploy: build
 	git checkout -B docs
 	git add docs

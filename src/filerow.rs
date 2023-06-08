@@ -3,27 +3,21 @@ use crate::api::UpvertedFile;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 
-#[derive(Eq, Hash, Debug, Ord, PartialOrd)]
-pub struct FileRow<'a, P>
-where
-    P: AsRef<str> + Eq,
-{
-    pub leaf: &'a str,
-    pub path: &'a [P],
+#[derive(Eq, Hash, Debug, Ord, PartialOrd, Clone)]
+pub struct FileRow {
+    pub leaf: String,
+    pub path: Vec<String>,
     pub dir: bool,
     // Later I will show the total size of a directory.
     pub size: Option<i64>,
 }
 
-impl<'a, P> FileRow<'a, P>
-where
-    P: AsRef<str> + Eq,
-{
+impl FileRow {
     fn iter_path(&self) -> impl Iterator<Item = &str> {
         self.path
             .iter()
-            .map(|x| x.as_ref())
-            .chain(std::iter::once(self.leaf))
+            .map(|x| x.as_str())
+            .chain(std::iter::once(self.leaf.as_str()))
     }
 
     fn compare_with_collator(&self, other: &Self, collator: &Collator) -> Ordering {
@@ -33,22 +27,20 @@ where
     }
 }
 
-impl<'b, P, Q> PartialEq<FileRow<'b, Q>> for FileRow<'b, P>
-where
-    P: Eq + AsRef<str> + PartialEq<Q>,
-    Q: Eq + AsRef<str>,
-{
-    fn eq(&self, other: &FileRow<'b, Q>) -> bool {
+impl PartialEq for FileRow {
+    fn eq(&self, other: &FileRow) -> bool {
         self.leaf == other.leaf && self.path == other.path
     }
 }
 
-fn file_rows(files: &[UpvertedFile]) -> Vec<FileRow<String>> {
+fn file_rows(files: &[UpvertedFile]) -> Vec<FileRow> {
     files
         .iter()
         .map(|file| {
             let (leaf, path) = file.path.split_last().unwrap();
-            FileRow::<String> {
+            let leaf = leaf.clone();
+            let path = path.to_vec();
+            FileRow {
                 leaf,
                 path,
                 dir: false,
@@ -58,17 +50,17 @@ fn file_rows(files: &[UpvertedFile]) -> Vec<FileRow<String>> {
         .collect()
 }
 
-fn file_dir_file_rows(file: &UpvertedFile) -> impl IntoIterator<Item = FileRow<String>> {
+fn file_dir_file_rows(file: &UpvertedFile) -> impl IntoIterator<Item = FileRow> + '_ {
     let parts = &file.path;
     (0..parts.len() - 1).map(|leaf| FileRow {
-        leaf: &parts[leaf],
-        path: &parts[0..leaf],
+        leaf: parts[leaf].clone(),
+        path: parts[0..leaf].to_vec(),
         dir: true,
         size: None,
     })
 }
 
-fn dir_file_rows(files: &[UpvertedFile]) -> Vec<FileRow<String>> {
+fn dir_file_rows(files: &[UpvertedFile]) -> Vec<FileRow> {
     files
         .iter()
         .flat_map(file_dir_file_rows)
@@ -77,9 +69,9 @@ fn dir_file_rows(files: &[UpvertedFile]) -> Vec<FileRow<String>> {
         .collect()
 }
 
-pub fn info_files_to_file_rows(upverted: &[UpvertedFile]) -> Vec<FileRow<String>> {
+pub fn info_files_to_file_rows(upverted: &[UpvertedFile]) -> Vec<FileRow> {
     let mut rows = dir_file_rows(upverted);
-    rows.extend(file_rows(&upverted));
+    rows.extend(file_rows(upverted));
     let collator = new_collator();
     rows.sort_by(|left, right| left.compare_with_collator(right, &collator));
     rows

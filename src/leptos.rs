@@ -2,9 +2,8 @@ use super::*;
 use crate::api::*;
 use ::leptos::*;
 use anyhow::anyhow;
-
+use filerow::FileRow;
 use leptos_router::*;
-
 use std::collections::{HashMap, HashSet};
 use std::ffi::OsStr;
 use std::path::Path;

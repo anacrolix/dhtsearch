@@ -25,6 +25,24 @@ pub fn App(cx: Scope) -> impl IntoView {
     }
 }
 
+fn with_cached_info_files<T>(
+    cache: ReadSignal<InfoFilesCache>,
+    info_hash: ReadSignal<Option<String>>,
+    with: impl Fn(&InfoFiles) -> T,
+) -> Option<T> {
+    cache.with(|cache| {
+        info_hash.with(|info_hash| {
+            info_hash
+                .as_ref()
+                .map(|info_hash| match cache.get(info_hash) {
+                    Some(Some(Ok(info_files))) => Some(with(info_files)),
+                    _ => None,
+                })
+                .flatten()
+        })
+    })
+}
+
 #[component]
 fn InsideRouter(cx: Scope) -> impl IntoView {
     // let search_query = move || use_query_map(cx)().get("s").cloned().unwrap_or_default();
@@ -54,8 +72,20 @@ fn InsideRouter(cx: Scope) -> impl IntoView {
             });
         });
     });
+    let file_rows: Signal<Option<Vec<FileRow>>> = create_memo(cx, move |_last| {
+        with_cached_info_files(
+            info_files_cache.read_only(),
+            torrent_ih.read_only(),
+            |info_files| {
+                debug!("running file rows memo for {}", &info_files.info.info_hash);
+                info_files_to_file_rows(&info_files.upverted_files())
+            },
+        )
+    })
+    .into();
     move || {
-        let search_view = view! { cx,
+        let search_view = {
+            view! { cx,
                 <Suspense fallback=move || {
                     view! { cx, <p>"Searching..."</p> }
                 }>
@@ -66,16 +96,28 @@ fn InsideRouter(cx: Scope) -> impl IntoView {
                     />
                 </Suspense>
             }
+        }
         .into_view(cx);
-        let torrent_view = view! { cx,
-                <TorrentInfo
-                    info_files_cache=info_files_cache.read_only()
-                    info_hash=torrent_ih.derive_signal(cx)
-                />
-            }
-        .into_view(cx);
+        let torrent_view: Option<_> = {
+            file_rows.with(|file_rows| {
+                debug!("torrent view: {:?}", file_rows);
+                match file_rows {
+                    Some(file_rows) => with_cached_info_files(
+                        info_files_cache.read_only(),
+                        torrent_ih.read_only(),
+                        |info_files| {
+                            debug!("viewing torrent info");
+                            let info = info_files.info.clone();
+                            let file_rows = file_rows.to_vec();
+                            view! { cx, <TorrentInfo file_rows info/> }
+                        },
+                    ),
+                    None => None,
+                }
+            })
+        };
         let contents_view = match torrent_ih() {
-            Some(_) => torrent_view,
+            Some(_) => torrent_view.into_view(cx),
             None => search_view,
         };
         let set_search_query = move |query| {
@@ -123,43 +165,25 @@ where
 }
 
 #[component]
-fn TorrentInfo(
-    cx: Scope,
-    info_files_cache: ReadSignal<InfoFilesCache>,
-    info_hash: Signal<Option<String>>,
-) -> impl IntoView {
-    move || {
-        info_hash.with(|info_hash| {
-            info!("torrent info with {:?}", info_hash);
-            info_hash
-                .as_ref()
-                .map(|info_hash| match info_files_cache().get(info_hash) {
-                    None => Ok(view! { cx, <p>"Loading..."</p> }.into_view(cx)),
-                    Some(None) => Err(anyhow!("missing ih param").into()),
-                    Some(Some(Ok(info_files))) => {
-                        let magnet_link = make_magnet_link(&info_files.info.info_hash);
-                        Ok(view! { cx,
-                                <p>
-                                    <a href=&magnet_link>
-                                        <i class="fa fa-magnet"></i>
-                                        {magnet_link}
-                                    </a>
-                                </p>
-                                <pre>{format!("{:#?}", info_files.info)}</pre>
-                                <TorrentFiles info_files/>
-                            }
-                        .into_view(cx))
-                    }
-                    Some(Some(Err(err))) => Err(err.clone()),
-                })
-        })
+fn TorrentInfo(cx: Scope, info: Info, file_rows: Vec<FileRow>) -> impl IntoView {
+    let magnet_link = make_magnet_link(&info.info_hash);
+    view! { cx,
+        <p>
+            <a href=&magnet_link>
+                <i class="fa fa-magnet"></i>
+                {magnet_link}
+            </a>
+        </p>
+        <pre>{format!("{:#?}", info)}</pre>
+        <TorrentFiles file_rows/>
     }
 }
 
 #[component]
-fn TorrentFiles<'a>(cx: Scope, info_files: &'a InfoFiles) -> impl IntoView {
-    let rows = info_files_to_file_rows(&info_files.upverted_files())
-        .into_iter()
+fn TorrentFiles(cx: Scope, file_rows: Vec<FileRow>) -> impl IntoView {
+    let rows = file_rows
+        .iter()
+        .cloned()
         .map(|row| {
             let leaf = row.leaf.to_owned();
             view! { cx,
@@ -180,9 +204,10 @@ fn TorrentFiles<'a>(cx: Scope, info_files: &'a InfoFiles) -> impl IntoView {
             }
         })
         .collect_view(cx);
+    let num_files = file_rows.len();
     view! { cx,
         <table>
-            <caption>{info_files.files.len()} " files"</caption>
+            <caption>{num_files} " files"</caption>
             {rows}
         </table>
     }
@@ -226,11 +251,10 @@ fn TorrentsList(
             .items
             .into_iter()
             .map(|torrent| {
-                let info_files = cache
+                let info_files: Option<&InfoFiles> = cache
                     .get(&torrent.info_hash)
-                    .cloned()
-                    .flatten()
-                    .and_then(|result| result.ok());
+                    .and_then(|value| value.as_ref().map(|result| result.as_ref().ok()))
+                    .flatten();
                 let loading =
                     move || view! { cx, <i class="fa fa-spinner fa-spin-pulse"></i> }.into_view(cx);
                 let num_files = info_files
