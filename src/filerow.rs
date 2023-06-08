@@ -10,10 +10,11 @@ pub struct FileRow {
     pub dir: bool,
     // Later I will show the total size of a directory.
     pub size: Option<i64>,
+    pub so: Option<usize>,
 }
 
 impl FileRow {
-    fn iter_path(&self) -> impl Iterator<Item = &str> {
+    pub fn iter_path(&self) -> impl Iterator<Item = &str> {
         self.path
             .iter()
             .map(|x| x.as_str())
@@ -36,7 +37,8 @@ impl PartialEq for FileRow {
 fn file_rows(files: &[UpvertedFile]) -> Vec<FileRow> {
     files
         .iter()
-        .map(|file| {
+        .enumerate()
+        .map(|(so, file)| {
             let (leaf, path) = file.path.split_last().unwrap();
             let leaf = leaf.clone();
             let path = path.to_vec();
@@ -45,6 +47,7 @@ fn file_rows(files: &[UpvertedFile]) -> Vec<FileRow> {
                 path,
                 dir: false,
                 size: Some(file.length),
+                so: Some(so),
             }
         })
         .collect()
@@ -57,6 +60,7 @@ fn file_dir_file_rows(file: &UpvertedFile) -> impl IntoIterator<Item = FileRow> 
         path: parts[0..leaf].to_vec(),
         dir: true,
         size: None,
+        so: None,
     })
 }
 
@@ -81,13 +85,16 @@ pub fn info_files_to_file_rows(upverted: &[UpvertedFile]) -> Vec<FileRow> {
 mod tests {
     use super::*;
     use crate::api::*;
+    use crate::leptos::FileView;
+    use pretty_assertions::assert_eq;
 
-    fn dir_file_row<'a>(leaf: &'a str, path: &'a [&'a str]) -> FileRow<'a, &'a str> {
+    fn dir_file_row<'a>(leaf: &'a str, path: &'a [&'a str]) -> FileRow {
         FileRow {
-            leaf,
-            path,
+            leaf: leaf.to_string(),
+            path: path.iter().map(|s| s.to_string()).collect(),
             dir: true,
             size: None,
+            so: None,
         }
     }
 
@@ -101,31 +108,131 @@ mod tests {
     }
 
     #[test]
-    fn test_dir_file_rows() {
+    fn test_simple_file_rows_and_views() {
         let upverted = InfoFiles {
             info: Info {
                 name: "a".to_owned().into(),
                 ..Default::default()
             },
-            files: vec![File {
-                path: Some(
-                    vec!["a", "b", "c", "d"]
-                        .into_iter()
-                        .map(ToOwned::to_owned)
-                        .collect(),
-                ),
-                length: 42,
-            }],
+            files: vec![
+                File {
+                    path: Some(
+                        vec!["a", "b", "c", "10"]
+                            .into_iter()
+                            .map(ToOwned::to_owned)
+                            .collect(),
+                    ),
+                    length: 1,
+                },
+                File {
+                    path: Some(
+                        vec!["a", "b", "c", "10"]
+                            .into_iter()
+                            .map(ToOwned::to_owned)
+                            .collect(),
+                    ),
+                    length: 2,
+                },
+                File {
+                    path: Some(
+                        vec!["a", "b", "c", "2"]
+                            .into_iter()
+                            .map(ToOwned::to_owned)
+                            .collect(),
+                    ),
+                    length: 3,
+                },
+                File {
+                    path: Some(vec!["a", "b"].into_iter().map(ToOwned::to_owned).collect()),
+                    length: 4,
+                },
+            ],
         }
         .upverted_files();
+        let file_rows = info_files_to_file_rows(&upverted);
         same_contents(
-            dir_file_rows(&upverted),
+            file_rows.clone(),
             vec![
                 dir_file_row(&"a", &[]),
                 dir_file_row(&"b", &["a"]),
                 dir_file_row(&"c", &["a", "b"]),
+                FileRow {
+                    leaf: "10".into(),
+                    path: ["a", "b", "c"].into_iter().map(ToOwned::to_owned).collect(),
+                    dir: false,
+                    size: Some(1),
+                    so: Some(0),
+                },
+                FileRow {
+                    leaf: "10".into(),
+                    path: ["a", "b", "c"].into_iter().map(ToOwned::to_owned).collect(),
+                    dir: false,
+                    size: Some(2),
+                    so: Some(1),
+                },
+                FileRow {
+                    leaf: "2".into(),
+                    path: ["a", "b", "c"].into_iter().map(ToOwned::to_owned).collect(),
+                    dir: false,
+                    size: Some(3),
+                    so: Some(2),
+                },
+                FileRow {
+                    leaf: "b".into(),
+                    path: ["a"].into_iter().map(ToOwned::to_owned).collect(),
+                    dir: false,
+                    size: Some(4),
+                    so: Some(3),
+                },
             ],
         );
+        let file_view = FileView::from_file_rows(&file_rows);
+        assert_eq!(
+            file_view,
+            Some(FileView {
+                name: "a".to_string(),
+                size: 10,
+                so: None,
+                children: vec![
+                    FileView {
+                        name: "b".to_string(),
+                        size: 4,
+                        so: Some(3),
+                        children: vec![],
+                    },
+                    FileView {
+                        name: "b".to_string(),
+                        size: 6,
+                        so: None,
+                        children: vec![FileView {
+                            name: "c".to_string(),
+                            size: 6,
+                            so: None,
+                            children: vec![
+                                FileView {
+                                    name: "2".to_string(),
+                                    size: 3,
+                                    so: Some(2),
+                                    children: vec![],
+                                },
+                                FileView {
+                                    name: "10".to_string(),
+                                    size: 2,
+                                    so: Some(1),
+                                    children: vec![],
+                                },
+                                FileView {
+                                    name: "10".to_string(),
+                                    size: 1,
+                                    so: Some(0),
+                                    children: vec![],
+                                }
+                            ],
+                        }],
+                    }
+                ],
+            })
+        )
     }
 
     #[test]
@@ -144,11 +251,12 @@ mod tests {
                 }
                 .upverted_files()
             ),
-            vec![FileRow::<String> {
-                leaf: &"a",
-                path: &[],
+            vec![FileRow {
+                leaf: "a".to_string(),
+                path: vec![],
                 dir: false,
                 size: Some(0),
+                so: Some(0),
             }]
         )
     }

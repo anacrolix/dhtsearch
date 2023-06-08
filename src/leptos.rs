@@ -106,3 +106,58 @@ fn file_types(info_files: &InfoFiles) -> Vec<String> {
 pub fn mount_to_body() {
     ::leptos::mount_to_body(|cx| view! { cx, <App/> })
 }
+
+#[derive(Debug, PartialEq)]
+pub(crate) struct FileView {
+    pub name: String,
+    pub children: Vec<FileView>,
+    pub size: u64,
+    pub so: Option<usize>,
+}
+
+impl FileView {
+    pub fn from_file_rows<'a>(
+        file_rows: impl IntoIterator<Item = &'a FileRow> + Copy,
+    ) -> Option<Self> {
+        let this_file_row: &FileRow = match file_rows.into_iter().next() {
+            Some(file_row) => file_row,
+            None => return None,
+        };
+        Some(Self::from_file_rows_inner(this_file_row, file_rows))
+    }
+
+    fn from_file_rows_inner<'a>(
+        target: &FileRow,
+        file_rows: impl IntoIterator<Item = &'a FileRow> + Copy,
+    ) -> Self {
+        let children = if target.dir {
+            let mut children: Vec<FileView> = file_rows
+                .into_iter()
+                .filter(|file_row: &&FileRow| {
+                    file_row.path.len() == target.path.len() + 1
+                        && target.iter_path().eq(file_row.path.iter())
+                })
+                .map(|file_row| Self::from_file_rows_inner(file_row, file_rows))
+                .collect();
+            let collator = new_collator();
+            children.sort_by(|left, right| {
+                collator.compare(&left.name, &right.name).then(
+                    left.children
+                        .is_empty()
+                        .cmp(&right.children.is_empty())
+                        .reverse(),
+                ).then(left.size.cmp(&right.size).reverse())
+            });
+            children
+        } else {
+            vec![]
+        };
+        FileView {
+            name: target.leaf.clone(),
+            so: target.so,
+            size: target.size.unwrap_or_default() as u64
+                + children.iter().map(|file_view| file_view.size).sum::<u64>(),
+            children,
+        }
+    }
+}
