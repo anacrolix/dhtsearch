@@ -2,7 +2,7 @@
 
 use icu_collator::Numeric::On;
 use icu_collator::{Collator, CollatorOptions};
-use log::info;
+use log::{debug, info};
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::Deref;
 use std::sync::Arc;
