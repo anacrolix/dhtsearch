@@ -107,12 +107,14 @@ pub fn mount_to_body() {
     ::leptos::mount_to_body(|cx| view! { cx, <App/> })
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub(crate) struct FileView {
+    pub depth: usize,
     pub name: String,
     pub children: Vec<FileView>,
     pub size: u64,
     pub so: Option<usize>,
+    pub expanded: bool,
 }
 
 impl FileView {
@@ -164,20 +166,61 @@ impl FileView {
             size: target.size.unwrap_or_default() as u64
                 + children.iter().map(|file_view| file_view.size).sum::<u64>(),
             children,
+            expanded: true,
+            depth: target.path.len(),
         }
     }
 }
 
 impl IntoView for FileView {
     fn into_view(self, cx: Scope) -> View {
-        let child_rows = self.children.collect_view(cx);
+        let (expanded, set_expanded) = create_signal(cx, self.expanded);
+        let name = self.name.clone();
+        let name = if self.children.is_empty() {
+            name.into_view(cx)
+        } else {
+            view! { cx,
+                <a href="#" on:click=move |_cx| set_expanded(!expanded())>
+                    {name}
+                </a>
+            }
+            .into_view(cx)
+        };
+        let child_rows = {
+            let children = self.children.clone();
+            move || {
+                if expanded() {
+                    Some(children.clone().collect_view(cx))
+                } else {
+                    None
+                }
+            }
+        };
+        let row = self;
+        let dir = !row.children.is_empty();
         view! { cx,
             <tr>
-                <td>{self.name}</td>
-                <td>{self.size}</td>
+                <td style:padding-left=format!("{}em", row.depth)>
+                    <input type="checkbox" disabled/>
+                    <i
+                        style:width="1em"
+                        style:padding-right="0.5em"
+                        class="fa-regular"
+                        class:fa-file=move || !dir
+                        class:fa-folder=move || dir
+                    ></i>
+                    {name}
+                </td>
+                <td>{format_size(row.size)}</td>
             </tr>
             {child_rows}
         }
-        .into_view(cx)
+        .into()
     }
+}
+
+fn format_size(size: u64) -> String {
+    let mut options = humansize::DECIMAL;
+    options.decimal_places=0;
+    humansize::format_size(size, options)
 }

@@ -191,29 +191,34 @@ fn TorrentFilesNested<'a>(cx: Scope, file_rows: &'a Vec<FileRow>) -> impl IntoVi
         </table>
     }
 }
+
+#[component]
+fn FileViewRow(cx: Scope, row: FileRow) -> impl IntoView {
+    view! { cx,
+        <tr>
+            <td style:padding-left=format!("{}em", row.path.len())>
+                <input type="checkbox" disabled/>
+                <i
+                    style:width="1em"
+                    style:padding-right="0.5em"
+                    class="fa-regular"
+                    class:fa-file=move || !row.dir
+                    class:fa-folder=move || row.dir
+                ></i>
+                {row.leaf()}
+            </td>
+            <td>{row.size.map(|size| format_size(size as u64, DECIMAL))}</td>
+        </tr>
+    }
+}
+
 #[component]
 fn TorrentFiles(cx: Scope, file_rows: Vec<FileRow>) -> impl IntoView {
     let rows = file_rows
         .iter()
         .cloned()
         .map(|row| {
-            let leaf = row.leaf().to_owned();
-            view! { cx,
-                <tr>
-                    <td style:padding-left=format!("{}em", row.path.len())>
-                        <input type="checkbox" disabled/>
-                        <i
-                            style:width="1em"
-                            style:padding-right="0.5em"
-                            class="fa-regular"
-                            class:fa-file=move || !row.dir
-                            class:fa-folder=move || row.dir
-                        ></i>
-                        {leaf}
-                    </td>
-                    <td>{row.size.map(|size| format_size(size as u64, DECIMAL))}</td>
-                </tr>
-            }
+            view! { cx, <FileViewRow row/> }
         })
         .collect_view(cx);
     let num_files = file_rows.len();
