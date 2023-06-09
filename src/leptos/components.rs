@@ -57,20 +57,35 @@ fn InsideRouter(cx: Scope) -> impl IntoView {
             Ok(Some(search(query).await?))
         });
     let info_files_cache = create_rw_signal(cx, InfoFilesCache::new());
-    create_effect(cx, move |_| {
+    create_effect(cx, move |attempted: Option<HashSet<_>>| {
+        let mut attempted = attempted.unwrap_or_default();
         info!("missing info files effect running");
         let needed = get_needed_info_hashes(cx, torrent_ih(), search_resource);
-        info_files_cache.with(|cache| {
-            let missing = get_missing_info_hashes(cache, needed);
-            if missing.is_empty() {
+        let spawn_fetch = move |info_hashes: Vec<_>| {
+            if info_hashes.is_empty() {
                 return;
             }
             spawn_local(async move {
-                fetch_info_files_into_cache(info_files_cache, missing)
+                fetch_info_files_into_cache(info_files_cache, info_hashes)
                     .await
                     .expect("fetch info files into cache failed")
-            });
+            })
+        };
+        info_files_cache.with(|cache| {
+            let mut missing = get_missing_info_hashes(cache, needed);
+            missing.retain(|info_hash| !attempted.contains(info_hash));
+            const FETCH_INDIVIDUALLY: bool = false;
+            if FETCH_INDIVIDUALLY {
+                for info_hash in missing {
+                    assert!(attempted.insert(info_hash.clone()));
+                    spawn_fetch(vec![info_hash]);
+                }
+            } else {
+                attempted.extend(missing.clone());
+                spawn_fetch(missing);
+            }
         });
+        attempted
     });
     let file_rows: Signal<Option<Vec<FileRow>>> = create_memo(cx, move |_last| {
         with_cached_info_files(
