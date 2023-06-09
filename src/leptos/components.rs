@@ -98,8 +98,8 @@ fn InsideRouter(cx: Scope) -> impl IntoView {
         )
     })
     .into();
-    move || {
-        let search_view = {
+    let search_view = move || {
+        {
             view! { cx,
                 <Suspense fallback=move || {
                     view! { cx, <p>"Searching..."</p> }
@@ -112,8 +112,10 @@ fn InsideRouter(cx: Scope) -> impl IntoView {
                 </Suspense>
             }
         }
-        .into_view(cx);
-        let torrent_view: Option<_> = {
+        .into_view(cx)
+    };
+    let torrent_view = move || {
+        let torrent_info = move || -> Option<View> {
             file_rows.with(|file_rows| {
                 debug!("torrent view: {:?}", file_rows);
                 match file_rows {
@@ -131,23 +133,29 @@ fn InsideRouter(cx: Scope) -> impl IntoView {
                 }
             })
         };
-        let contents_view = match torrent_ih() {
-            Some(_) => torrent_view.into_view(cx),
-            None => search_view,
-        };
-        let set_search_query = move |query| {
+        match torrent_info() {
+            Some(view) => view,
+            None => view! {cx, <p>"Loading..."</p>}.into_view(cx),
+        }
+    };
+    let contents_view = move || match torrent_ih() {
+        Some(_) => torrent_view.into_view(cx),
+        None => search_view.into_view(cx),
+    };
+    let set_search_query = move |query| {
+        cx.batch(|| {
             torrent_ih.set(None);
             set_search_query(query);
-        };
-        view! { cx,
-            <h1>{"DHT search"}</h1>
-            <div class="search-form">
-                <SearchForm search_query set_search_query/>
-            </div>
-            <ErrorBoundary fallback=|cx, errors| {
-                view! { cx, <ul>{list_errors(cx, errors)}</ul> }
-            }>{contents_view}</ErrorBoundary>
-        }
+        })
+    };
+    view! { cx,
+        <h1>{"DHT search"}</h1>
+        <div class="search-form">
+            <SearchForm search_query set_search_query/>
+        </div>
+        <ErrorBoundary fallback=|cx, errors| {
+            view! { cx, <ul>{list_errors(cx, errors)}</ul> }
+        }>{contents_view}</ErrorBoundary>
     }
 }
 
@@ -186,9 +194,10 @@ where
     K: ToOwned<Owned = O>,
     O: IntoView,
 {
-    view! { cx, <tr>
-        <td>{key.to_owned()}</td>
-        <td>{value.to_string()}</td>
+    view! { cx,
+        <tr>
+            <td>{key.to_owned()}</td>
+            <td>{value.to_string()}</td>
         </tr>
     }
 }
@@ -223,6 +232,7 @@ fn TorrentFilesNested<'a>(
     let mut root_file_view = FileView::from_file_rows(file_rows);
     if let Some(ref mut root) = root_file_view {
         root.name = info_name.to_owned();
+        root.expanded = true;
     }
     view! { cx,
         <table class="torrent-files">
