@@ -166,7 +166,7 @@ impl FileView {
             size: target.size.unwrap_or_default() as u64
                 + children.iter().map(|file_view| file_view.size).sum::<u64>(),
             children,
-            expanded: true,
+            expanded: false,
             depth: target.path.len(),
         }
     }
@@ -221,6 +221,6 @@ impl IntoView for FileView {
 
 fn format_size(size: u64) -> String {
     let mut options = humansize::DECIMAL;
-    options.decimal_places=0;
+    options.decimal_places = 1;
     humansize::format_size(size, options)
 }

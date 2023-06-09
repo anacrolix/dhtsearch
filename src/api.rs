@@ -37,6 +37,19 @@ pub struct SwarmInfo {
     pub leechers: u32,
 }
 
+impl Display for SwarmInfo {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_map()
+            .key(&"seeders")
+            .value(&self.seeders)
+            .key(&"completed")
+            .value(&self.completed)
+            .key(&"leechers")
+            .value(&self.leechers)
+            .finish()
+    }
+}
+
 #[derive(Clone, PartialEq, Deserialize, Default, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct InfoFiles {

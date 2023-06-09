@@ -165,6 +165,20 @@ where
 }
 
 #[component]
+fn TorrentInfoMetadataItem<K, O, V>(cx: Scope, key: K, value: V) -> impl IntoView
+where
+    V: Display,
+    K: ToOwned<Owned = O>,
+    O: IntoView,
+{
+    view! { cx, <tr>
+        <td>{key.to_owned()}</td>
+        <td>{value.to_string()}</td>
+        </tr>
+    }
+}
+
+#[component]
 fn TorrentInfo(cx: Scope, info: Info, file_rows: Vec<FileRow>) -> impl IntoView {
     let magnet_link = make_magnet_link(&info.info_hash);
     view! { cx,
@@ -174,19 +188,30 @@ fn TorrentInfo(cx: Scope, info: Info, file_rows: Vec<FileRow>) -> impl IntoView 
                 {magnet_link}
             </a>
         </p>
-        <pre>{format!("{:#?}", info)}</pre>
-        <TorrentFilesNested file_rows=&file_rows/>
-        <TorrentFiles file_rows/>
+        <table>
+            <TorrentInfoMetadataItem key="Swarm" value=info.scrape_data/>
+            <TorrentInfoMetadataItem key="Infohash" value=info.info_hash/>
+            <TorrentInfoMetadataItem key="Age" value=info.age/>
+            <TorrentInfoMetadataItem key="Scrape Time" value=info.scrape_time/>
+            <TorrentInfoMetadataItem key="Num Files" value=file_rows.len()/>
+        </table>
+        <TorrentFilesNested file_rows=&file_rows info_name=info.name.as_ref()/>
     }
 }
 
 #[component]
-fn TorrentFilesNested<'a>(cx: Scope, file_rows: &'a Vec<FileRow>) -> impl IntoView {
-    let root_file_view = FileView::from_file_rows(file_rows);
-    let num_files = file_rows.len();
+fn TorrentFilesNested<'a>(
+    cx: Scope,
+    file_rows: &'a Vec<FileRow>,
+    info_name: &'a str,
+) -> impl IntoView {
+    let mut root_file_view = FileView::from_file_rows(file_rows);
+    if let Some(ref mut root) = root_file_view {
+        root.name = info_name.to_owned();
+    }
     view! { cx,
-        <table>
-            <caption>{num_files} " files"</caption>
+        <table class="torrent-files">
+            <caption>"Files"</caption>
             {root_file_view}
         </table>
     }
@@ -209,24 +234,6 @@ fn FileViewRow(cx: Scope, row: FileRow) -> impl IntoView {
             </td>
             <td>{row.size.map(|size| format_size(size as u64, DECIMAL))}</td>
         </tr>
-    }
-}
-
-#[component]
-fn TorrentFiles(cx: Scope, file_rows: Vec<FileRow>) -> impl IntoView {
-    let rows = file_rows
-        .iter()
-        .cloned()
-        .map(|row| {
-            view! { cx, <FileViewRow row/> }
-        })
-        .collect_view(cx);
-    let num_files = file_rows.len();
-    view! { cx,
-        <table>
-            <caption>{num_files} " files"</caption>
-            {rows}
-        </table>
     }
 }
 
