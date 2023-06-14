@@ -34,11 +34,10 @@ fn with_cached_info_files<T>(
         info_hash.with(|info_hash| {
             info_hash
                 .as_ref()
-                .map(|info_hash| match cache.get(info_hash) {
+                .and_then(|info_hash| match cache.get(info_hash) {
                     Some(Some(Ok(info_files))) => Some(with(info_files)),
                     _ => None,
                 })
-                .flatten()
         })
     })
 }
@@ -176,15 +175,14 @@ where
 }
 
 #[component]
-fn TorrentInfoMetadataItem<K, O, V>(cx: Scope, key: K, value: V) -> impl IntoView
+fn TorrentInfoMetadataItem<K, V>(cx: Scope, key: K, value: V) -> impl IntoView
 where
     V: Display,
-    K: ToOwned<Owned = O>,
-    O: IntoView,
+    K: IntoView,
 {
     view! { cx,
         <tr>
-            <td>{key.to_owned()}</td>
+            <td>{key}</td>
             <td>{value.to_string()}</td>
         </tr>
     }
@@ -222,16 +220,15 @@ fn TorrentInfo(
         let files_view = file_rows.with(|file_rows| {
             file_rows
                 .as_ref()
-                .map(|file_rows| {
+                .and_then(|file_rows| {
                     metadata_items.push(view! { cx, <TorrentInfoMetadataItem key="Num Files" value=file_rows.len()/> });
                     info.with(|info| {
                         info.as_ref().map(|info| {
-                            view! { cx, <TorrentFilesNested file_rows=&file_rows info_name=info.name.as_ref()/> }
+                            view! { cx, <TorrentFilesNested file_rows info_name=info.name.as_ref()/> }
                             .into_view(cx)
                         })
                     })
                 })
-                .flatten()
                 .unwrap_or_else(|| view! { cx, <p>Loading...</p> }.into_view(cx))
         });
         let metadata_items_view = if metadata_items.is_empty() {
@@ -283,7 +280,8 @@ fn SearchResult(
             ok.map(|some| {
                 view! { cx,
                     <h3>{format!("Search results for {:?}", search_query())}</h3>
-                    <TorrentsList search_value=some info_files_cache set_torrent_ih/> }
+                    <TorrentsList search_value=some info_files_cache set_torrent_ih/>
+                }
             })
         })),
     })

@@ -2,14 +2,23 @@ use super::*;
 use crate::api::UpvertedFile;
 use std::cmp::Ordering;
 use std::collections::HashSet;
+use std::hash::{Hash, Hasher};
 
-#[derive(Eq, Hash, Debug, Ord, PartialOrd, Clone)]
+#[derive(Eq, Debug, Ord, PartialOrd, Clone)]
 pub struct FileRow {
     pub path: Vec<String>,
     pub dir: bool,
     // Later I will show the total size of a directory.
     pub size: Option<i64>,
     pub so: Option<usize>,
+}
+
+impl Hash for FileRow {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        for part in &self.path {
+            part.hash(state);
+        }
+    }
 }
 
 impl FileRow {
