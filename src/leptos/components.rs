@@ -102,44 +102,32 @@ fn InsideRouter(cx: Scope) -> impl IntoView {
         {
             view! { cx,
                 <Suspense fallback=move || {
-                    view! { cx, <p>"Searching..."</p> }
+                    view! { cx, <p>{format!("Searching for {:?}...", search_query())}</p> }
                 }>
                     <SearchResult
                         herp=search_resource
                         info_files_cache=info_files_cache.read_only()
                         set_torrent_ih=torrent_ih.write_only()
+                        search_query=search_query.into()
                     />
                 </Suspense>
             }
         }
         .into_view(cx)
     };
-    let torrent_view = move || {
-        let torrent_info = move || -> Option<View> {
-            file_rows.with(|file_rows| {
-                debug!("torrent view: {:?}", file_rows);
-                match file_rows {
-                    Some(file_rows) => with_cached_info_files(
-                        info_files_cache.read_only(),
-                        torrent_ih.read_only(),
-                        |info_files| {
-                            debug!("viewing torrent info");
-                            let info = info_files.info.clone();
-                            let file_rows = file_rows.to_vec();
-                            view! { cx, <TorrentInfo file_rows info/> }
-                        },
-                    ),
-                    None => None,
-                }
-            })
-        };
-        match torrent_info() {
-            Some(view) => view,
-            None => view! {cx, <p>"Loading..."</p>}.into_view(cx),
-        }
+    let with_current_info = move || {
+        with_cached_info_files(
+            info_files_cache.read_only(),
+            torrent_ih.read_only(),
+            |info_files| info_files.info.clone(),
+        )
     };
     let contents_view = move || match torrent_ih() {
-        Some(_) => torrent_view.into_view(cx),
+        Some(info_hash) => {
+            let info = with_current_info.derive_signal(cx);
+            view! { cx, <TorrentInfo file_rows info info_hash/> }
+        }
+        .into_view(cx),
         None => search_view.into_view(cx),
     };
     let set_search_query = move |query| {
@@ -203,23 +191,62 @@ where
 }
 
 #[component]
-fn TorrentInfo(cx: Scope, info: Info, file_rows: Vec<FileRow>) -> impl IntoView {
-    let magnet_link = make_magnet_link(&info.info_hash);
-    view! { cx,
-        <p>
-            <a href=&magnet_link>
-                <i class="fa fa-magnet"></i>
-                {magnet_link}
-            </a>
-        </p>
-        <table>
-            <TorrentInfoMetadataItem key="Swarm" value=info.scrape_data/>
-            <TorrentInfoMetadataItem key="Infohash" value=info.info_hash/>
-            <TorrentInfoMetadataItem key="Age" value=info.age/>
-            <TorrentInfoMetadataItem key="Scrape Time" value=info.scrape_time/>
-            <TorrentInfoMetadataItem key="Num Files" value=file_rows.len()/>
-        </table>
-        <TorrentFilesNested file_rows=&file_rows info_name=info.name.as_ref()/>
+fn TorrentInfo(
+    cx: Scope,
+    info: Signal<Option<Info>>,
+    file_rows: Signal<Option<Vec<FileRow>>>,
+    info_hash: String,
+) -> impl IntoView {
+    move || {
+        let mut magnet_link_view = None;
+        let mut metadata_items = vec![];
+        info.with(|info| info.as_ref().map(|info|{
+            let magnet_link = make_magnet_link(&info.info_hash);
+            magnet_link_view = Some(view! { cx,
+                    <p>
+                        <a href=&magnet_link>
+                            <i class="fa fa-magnet"></i>
+                            {magnet_link}
+                        </a>
+                    </p>
+                });
+            metadata_items
+                .push(view! { cx, <TorrentInfoMetadataItem key="Swarm" value=&info.scrape_data/> });
+            metadata_items.push(
+                view! { cx, <TorrentInfoMetadataItem key="Infohash" value=&info.info_hash/> },
+            );
+            metadata_items
+                .push(view! { cx, <TorrentInfoMetadataItem key="Age" value=&info.age/> });
+            metadata_items.push(view! { cx, <TorrentInfoMetadataItem key="Scrape Time" value=&info.scrape_time/> });
+        }));
+        let files_view = file_rows.with(|file_rows| {
+            file_rows
+                .as_ref()
+                .map(|file_rows| {
+                    metadata_items.push(view! { cx, <TorrentInfoMetadataItem key="Num Files" value=file_rows.len()/> });
+                    info.with(|info| {
+                        info.as_ref().map(|info| {
+                            view! { cx, <TorrentFilesNested file_rows=&file_rows info_name=info.name.as_ref()/> }
+                            .into_view(cx)
+                        })
+                    })
+                })
+                .flatten()
+                .unwrap_or_else(|| view! { cx, <p>Loading...</p> }.into_view(cx))
+        });
+        let metadata_items_view = if metadata_items.is_empty() {
+            None
+        } else {
+            Some(view! { cx, <table>{metadata_items.collect_view(cx)}</table> })
+        };
+        view! { cx,
+            <section class="torrent-info">
+            <h3>Torrent Info for {info_hash.clone()}</h3>
+            {magnet_link_view}
+            {metadata_items_view}
+            {files_view}
+            </section>
+        }
     }
 }
 
@@ -268,12 +295,15 @@ fn SearchResult(
     herp: SearchResultResource,
     info_files_cache: ReadSignal<InfoFilesCache>,
     set_torrent_ih: WriteSignal<Option<String>>,
+    search_query: Signal<String>,
 ) -> impl IntoView {
     herp.read(cx).map(|ready| match ready {
         Ok(None) => None,
         otherwise => Some(otherwise.map(|ok| {
             ok.map(|some| {
-                view! { cx, <TorrentsList search_value=some info_files_cache set_torrent_ih/> }
+                view! { cx,
+                    <h3>{format!("Search results for {:?}", search_query())}</h3>
+                    <TorrentsList search_value=some info_files_cache set_torrent_ih/> }
             })
         })),
     })
