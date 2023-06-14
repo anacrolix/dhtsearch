@@ -270,26 +270,6 @@ fn TorrentFilesNested<'a>(
 }
 
 #[component]
-fn FileViewRow(cx: Scope, row: FileRow) -> impl IntoView {
-    view! { cx,
-        <tr>
-            <td style:padding-left=format!("{}em", row.path.len())>
-                <input type="checkbox" disabled/>
-                <i
-                    style:width="1em"
-                    style:padding-right="0.5em"
-                    class="fa-regular"
-                    class:fa-file=move || !row.dir
-                    class:fa-folder=move || row.dir
-                ></i>
-                {row.leaf()}
-            </td>
-            <td>{row.size.map(|size| format_size(size as u64, DECIMAL))}</td>
-        </tr>
-    }
-}
-
-#[component]
 fn SearchResult(
     cx: Scope,
     herp: SearchResultResource,
