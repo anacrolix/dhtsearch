@@ -193,42 +193,58 @@ mod tests {
         assert_eq!(
             file_view,
             Some(FileView {
+                depth: 0,
+                expanded: false,
                 name: "".to_string(),
                 size: 10,
                 so: None,
                 children: vec![FileView {
+                    depth: 1,
+                    expanded: false,
                     name: "a".to_string(),
                     size: 10,
                     so: None,
                     children: vec![
                         FileView {
+                            depth: 2,
+                            expanded: false,
                             name: "b".to_string(),
                             size: 4,
                             so: Some(3),
                             children: vec![],
                         },
                         FileView {
+                            depth: 2,
+                            expanded: false,
                             name: "b".to_string(),
                             size: 6,
                             so: None,
                             children: vec![FileView {
+                                depth: 3,
+                                expanded: false,
                                 name: "c".to_string(),
                                 size: 6,
                                 so: None,
                                 children: vec![
                                     FileView {
+                                        depth: 4,
+                                        expanded: false,
                                         name: "2".to_string(),
                                         size: 3,
                                         so: Some(2),
                                         children: vec![],
                                     },
                                     FileView {
+                                        depth: 4,
+                                        expanded: false,
                                         name: "10".to_string(),
                                         size: 2,
                                         so: Some(1),
                                         children: vec![],
                                     },
                                     FileView {
+                                        depth: 4,
+                                        expanded: false,
                                         name: "10".to_string(),
                                         size: 1,
                                         so: Some(0),
