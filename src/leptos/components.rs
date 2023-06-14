@@ -195,6 +195,23 @@ fn TorrentInfo(
     file_rows: Signal<Option<Vec<FileRow>>>,
     info_hash: String,
 ) -> impl IntoView {
+    let root_file_view: Signal<Option<FileView>> = create_memo(cx, move |_| {
+        file_rows
+            .with(|file_rows| {
+                file_rows.as_ref().map(|file_rows| {
+                    info.with(|info| {
+                        info.as_ref().map(|info| {
+                            let mut root = FileView::from_file_rows(file_rows);
+                            root.expanded = true;
+                            root.name = info.name.to_string();
+                            root
+                        })
+                    })
+                })
+            })
+            .flatten()
+    })
+    .derive_signal(cx);
     move || {
         let mut magnet_link_view = None;
         let mut metadata_items = vec![];
@@ -217,20 +234,20 @@ fn TorrentInfo(
                 .push(view! { cx, <TorrentInfoMetadataItem key="Age" value=&info.age/> });
             metadata_items.push(view! { cx, <TorrentInfoMetadataItem key="Scrape Time" value=&info.scrape_time/> });
         }));
-        let files_view = file_rows.with(|file_rows| {
-            file_rows
-                .as_ref()
-                .and_then(|file_rows| {
-                    metadata_items.push(view! { cx, <TorrentInfoMetadataItem key="Num Files" value=file_rows.len()/> });
-                    info.with(|info| {
-                        info.as_ref().map(|info| {
-                            view! { cx, <TorrentFilesNested file_rows info_name=info.name.as_ref()/> }
-                            .into_view(cx)
-                        })
-                    })
-                })
-                .unwrap_or_else(|| view! { cx, <p>Loading...</p> }.into_view(cx))
+        file_rows.with(|file_rows| {
+            file_rows.as_ref().map(|file_rows| {
+                metadata_items.push(
+                    view! { cx, <TorrentInfoMetadataItem key="Num Files" value=file_rows.len()/> },
+                );
+            })
         });
+        let files_view = root_file_view
+            .with(|root_file_view| {
+                root_file_view.clone().map(|root_file_view| {
+                    view! { cx, <TorrentFilesNested root_file_view/> }.into_view(cx)
+                })
+            })
+            .unwrap_or_else(|| view! { cx, <p>Loading...</p> }.into_view(cx));
         let metadata_items_view = if metadata_items.is_empty() {
             None
         } else {
@@ -248,16 +265,7 @@ fn TorrentInfo(
 }
 
 #[component]
-fn TorrentFilesNested<'a>(
-    cx: Scope,
-    file_rows: &'a Vec<FileRow>,
-    info_name: &'a str,
-) -> impl IntoView {
-    let mut root_file_view = FileView::from_file_rows(file_rows);
-    if let Some(ref mut root) = root_file_view {
-        root.name = info_name.to_owned();
-        root.expanded = true;
-    }
+fn TorrentFilesNested(cx: Scope, root_file_view: FileView) -> impl IntoView {
     view! { cx,
         <table class="torrent-files">
             <caption>"Files"</caption>

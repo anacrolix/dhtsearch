@@ -118,16 +118,14 @@ pub(crate) struct FileView {
 }
 
 impl FileView {
-    pub fn from_file_rows<'a>(
-        file_rows: impl IntoIterator<Item = &'a FileRow> + Copy,
-    ) -> Option<Self> {
+    pub fn from_file_rows<'a>(file_rows: impl IntoIterator<Item = &'a FileRow> + Copy) -> Self {
         let this_file_row = &FileRow {
             path: vec![],
             dir: true,
             size: None,
             so: None,
         };
-        Some(Self::from_file_rows_inner(this_file_row, file_rows))
+        Self::from_file_rows_inner(this_file_row, file_rows)
     }
 
     fn from_file_rows_inner<'a>(
