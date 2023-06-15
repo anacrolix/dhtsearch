@@ -80,7 +80,7 @@ fn file_path_base(file: &File) -> Option<&str> {
         .map(|last| last.as_str())
 }
 
-fn file_types(info_files: &InfoFiles) -> Vec<String> {
+pub fn file_types(info_files: &InfoFiles) -> Vec<String> {
     if let [File { path: None, .. }] = info_files.files[..] {
         return base_file_type(info_files.info.name.as_str())
             .into_iter()

@@ -7,20 +7,15 @@ use std::fmt::{Debug, Display, Formatter};
 use std::ops::Deref;
 use std::sync::Arc;
 
-mod api;
+pub mod api;
 mod filerow;
 #[cfg(feature = "leptos")]
 mod leptos;
 #[cfg(feature = "yew")]
 mod yew;
 
-fn main() {
-    wasm_logger::init(wasm_logger::Config::default());
-    #[cfg(feature = "leptos")]
-    leptos::mount_to_body();
-    #[cfg(feature = "yew")]
-    yew::mount_to_body();
-}
+pub use self::leptos::*;
+pub use crate::leptos::mount_to_body;
 
 fn make_magnet_link(info_hash: &str) -> String {
     "magnet:?xt=urn:btih:".to_owned() + info_hash

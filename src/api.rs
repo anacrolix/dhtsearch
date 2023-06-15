@@ -77,7 +77,7 @@ impl InfoFiles {
     }
 }
 
-type InfoFilesPayload = Vec<InfoFiles>;
+pub type InfoFilesPayload = Vec<InfoFiles>;
 
 #[derive(Clone, PartialEq, Deserialize, Default, Debug)]
 #[serde(rename_all = "PascalCase")]

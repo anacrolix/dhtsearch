@@ -201,7 +201,7 @@ mod tests {
         let file_view = FileView::from_file_rows(&file_rows);
         assert_eq!(
             file_view,
-            Some(FileView {
+            FileView {
                 depth: 0,
                 expanded: false,
                 name: "".to_string(),
@@ -264,7 +264,7 @@ mod tests {
                         }
                     ],
                 },]
-            })
+            }
         )
     }
 
