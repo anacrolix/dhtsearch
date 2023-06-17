@@ -63,44 +63,54 @@ async fn fetch_info_files_into_cache(
     Ok(())
 }
 
-fn base_file_type<S>(base: &S) -> Option<String>
-where
-    S: AsRef<OsStr> + ?Sized,
-{
-    Path::new(base)
-        .extension()
-        .and_then(OsStr::to_str)
-        .map(str::to_lowercase)
-}
-
-fn file_path_base(file: &File) -> Option<&str> {
-    file.path
-        .as_ref()
-        .and_then(|parts| parts.last())
-        .map(|last| last.as_str())
-}
-
 pub fn file_types(info_files: &InfoFiles) -> Vec<String> {
     if let [File { path: None, .. }] = info_files.files[..] {
-        return base_file_type(info_files.info.name.as_str())
+        return Path::new(&info_files.info.name.as_str())
+            .extension()
+            .and_then(OsStr::to_str)
+            .map(str::to_lowercase)
             .into_iter()
             .collect();
     }
-    let mut files = info_files
-        .files
-        .iter()
-        .filter_map(|file| {
-            file_path_base(file)
-                .and_then(base_file_type)
-                .map(|ext| (file.length, ext))
-        })
-        .collect::<Vec<_>>();
-    files.sort();
-    files.reverse();
-    let mut seen = HashSet::new();
-    files.retain(|(_length, ext)| seen.insert(ext.clone()));
-    files.truncate(7);
-    files.into_iter().map(|elem| elem.1).collect()
+    let mut ext_refs = HashMap::<&OsStr, FileLength>::with_capacity(info_files.files.len());
+    for file in &info_files.files {
+        let ext = match file
+            .path
+            .as_ref()
+            .and_then(|x| x.last())
+            .map(Path::new)
+            .and_then(Path::extension)
+        {
+            Some(some) => some,
+            None => {
+                continue;
+            }
+        };
+        if let Some(existing) = ext_refs.get(ext) {
+            if *existing > file.length {
+                continue;
+            }
+        }
+        ext_refs.insert(ext, file.length);
+    }
+    const CARDINALITY: usize = 7;
+    let mut owned_exts: HashMap<String, FileLength> = HashMap::with_capacity(ext_refs.len());
+    for (ext, length) in ext_refs {
+        let Some(ext) = ext.to_str() else { continue };
+        let ext = ext.to_lowercase();
+        if let Some(cur_length) = owned_exts.get(&ext) {
+            if *cur_length >= length {
+                continue;
+            }
+        }
+        owned_exts.insert(ext, length);
+    }
+    let mut best: Vec<(String, FileLength)> = owned_exts.into_iter().collect();
+    best.sort_by(|(_, left_len), (_, right_len)| left_len.cmp(right_len).reverse());
+    best.into_iter()
+        .take(CARDINALITY)
+        .map(|(ext, _)| ext)
+        .collect()
 }
 
 pub fn mount_to_body() {
