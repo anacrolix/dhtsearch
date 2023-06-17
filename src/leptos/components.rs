@@ -164,6 +164,7 @@ where
                 <i class="fa fa-search"></i>
             </button>
             <input
+                autofocus
                 style="width: 100%"
                 type="search"
                 name="s"
