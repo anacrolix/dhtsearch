@@ -282,16 +282,15 @@ fn SearchResult(
     set_torrent_ih: WriteSignal<Option<String>>,
     search_query: Signal<String>,
 ) -> impl IntoView {
-    herp.read(cx).map(|ready| match ready {
-        Ok(None) => None,
-        otherwise => Some(otherwise.map(|ok| {
-            ok.map(|some| {
-                view! { cx,
-                    <h3>{format!("Search results for {:?}", search_query())}</h3>
-                    <TorrentsList search_value=some info_files_cache set_torrent_ih/>
-                }
+    move || herp.with(cx, |result| {
+        let Ok(Some(search_value))=result else {
+            return None;
+        };
+        let search_value = search_value.clone();
+        Some(view! { cx,
+                <h3>{format!("Search results for {:?}", search_query())}</h3>
+                <TorrentsList search_value info_files_cache set_torrent_ih/>
             })
-        })),
     })
 }
 
