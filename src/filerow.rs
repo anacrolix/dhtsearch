@@ -160,9 +160,9 @@ mod tests {
         same_contents(
             file_rows.clone(),
             vec![
-                dir_file_row(&"a", &[]),
-                dir_file_row(&"b", &["a"]),
-                dir_file_row(&"c", &["a", "b"]),
+                dir_file_row("a", &[]),
+                dir_file_row("b", &["a"]),
+                dir_file_row("c", &["a", "b"]),
                 FileRow {
                     path: ["a", "b", "c", "10"]
                         .into_iter()
