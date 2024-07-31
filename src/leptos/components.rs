@@ -283,16 +283,18 @@ fn SearchResult(
     set_torrent_ih: WriteSignal<Option<String>>,
     search_query: Signal<String>,
 ) -> impl IntoView {
-    move || herp.with(cx, |result| {
-        let Ok(Some(search_value))=result else {
-            return None;
-        };
-        let search_value = search_value.clone();
-        Some(view! { cx,
+    move || {
+        herp.with(cx, |result| {
+            let Ok(Some(search_value)) = result else {
+                return None;
+            };
+            let search_value = search_value.clone();
+            Some(view! { cx,
                 <h3>{format!("Search results for {:?}", search_query())}</h3>
                 <TorrentsList search_value info_files_cache set_torrent_ih/>
             })
-    })
+        })
+    }
 }
 
 fn view_file_types(cx: Scope, file_types: impl IntoIterator<Item = String>) -> impl IntoView {

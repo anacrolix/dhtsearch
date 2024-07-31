@@ -28,7 +28,7 @@ fn get_needed_info_hashes(
         .items
         .into_iter()
         .map(|item| item.info_hash)
-        .chain(torrent_ih.into_iter())
+        .chain(torrent_ih)
         .collect()
 }
 
