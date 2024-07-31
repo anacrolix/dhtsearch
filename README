@@ -1,0 +1,7 @@
+This is a front-end to the anacrolix/dht-indexer API. It is build in Rust using the Leptos web application framework and compiles to WebAssembly.
+
+As a demo you can download and run cove https://www.coveapp.info/ v0.4.10 or later, which exposes the API at http://localhost:8080/localDhtIndexer/ Run cove and ensure it has an search index (you could try searching using its UI, or rely on an existing search database you've been using). Clone this repo, and run `trunk serve --port 8081`. Navigate to http://localhost:8081 in your browser and try it out.
+
+It uses an old version of Leptos and appears to have some resources issues with more recent versions of Rust and WASM.
+
+The anacrolix/dht-indexer HTTP API is described in https://github.com/anacrolix/dhtsearch/blob/main/src/api.rs, albeit in Rust but it's pretty straight forward.
