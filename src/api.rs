@@ -104,10 +104,18 @@ pub struct File {
     pub length: FileLength,
 }
 
-const DHT_INDEXER_URL: &str = if false {
-    "/dhtindex/"
-} else {
+// I haven't figured out how to pass this from some app-level/page-level config yet. Leptos seems to
+// infer any missing parts from the context of the page URL. So if the host is missing, it will use
+// the same host etc. Elsewhere in the code we just append stuff to the end of this for now.
+const DHT_INDEXER_URL: &str = if true {
+    // Cove
+    "http://localhost:8080/localDhtIndexer/"
+} else if false {
+    // A Fly instance of the dht-indexer
     "https://dht-indexer-v2.fly.dev/"
+} else  {
+    // A locally run vanilla dht-indexer?
+    "/dhtindex/"
 };
 
 pub async fn search(query: String) -> Result<InfosSearch> {
